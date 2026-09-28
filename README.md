@@ -16,10 +16,16 @@ The skill is an unchanged copy of [`blader/humanizer` v3.0.0](https://github.com
 
 For updates, review the new upstream version and license, replace the skill and license, update both plugin manifests, validate, then commit and push this repository. Refresh the installed marketplace and plugin afterward.
 
-## Install in the ChatGPT desktop app / Codex
+## Install from GitHub in the desktop Codex environment
 
 1. Add this GitHub repository as a marketplace: `codex plugin marketplace add IsseiMatsuzoe/agent-skill-marketplace --ref main`.
 2. Restart the ChatGPT desktop app. Open the Plugins Directory, select the **Personal** marketplace, and install **Humanizer**.
-3. Start a new chat and ask, for example, `@humanizer Rewrite this paragraph without changing its facts: ...`. If the composer does not offer an `@humanizer` entry, select the installed Humanizer plugin or invoke its `humanizer` skill from the skill picker; the exact composer syntax depends on the surface.
+3. Start a new chat and select Humanizer from the plugin or skill picker.
 
-After a GitHub update, run `codex plugin marketplace upgrade personal`, reinstall or refresh Humanizer in the app, and start a new chat. Local marketplace support does not by itself publish this plugin to the universal ChatGPT plugin directory or make it available in ChatGPT Web or mobile.
+After a GitHub update, run `codex plugin marketplace upgrade personal`, reinstall or refresh Humanizer in the app, and start a new chat.
+
+## Install in ChatGPT Web
+
+Package the contents of `plugins/humanizer/` as a ZIP with `plugin.json` at the ZIP root. In ChatGPT, open **Plugins → Add → Upload plugin archive**, select that ZIP, then install the resulting personal plugin. In a new chat, type `@humanizer` and select **Humanizer** from the suggestion list.
+
+The ChatGPT upload is a snapshot. Pushing GitHub changes does not update that cloud copy automatically; upload and install a new archive after each reviewed update. A GitHub marketplace alone does not publish the plugin to the universal directory.
