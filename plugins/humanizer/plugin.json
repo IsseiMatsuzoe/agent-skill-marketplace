@@ -1,0 +1,6 @@
+{
+  "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
+  "name": "humanizer",
+  "version": "3.0.0",
+  "description": "Rewrite AI-sounding prose while preserving the writer's meaning."
+}

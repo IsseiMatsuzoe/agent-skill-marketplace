@@ -1,0 +1,19 @@
+{
+  "name": "humanizer",
+  "version": "3.0.0",
+  "description": "Rewrite AI-sounding prose while preserving the writer's meaning.",
+  "author": {
+    "name": "Siqi Chen"
+  },
+  "license": "MIT",
+  "skills": "./skills/",
+  "interface": {
+    "displayName": "Humanizer",
+    "shortDescription": "Make prose sound natural without changing its meaning.",
+    "longDescription": "Rewrite AI-sounding text while preserving the writer's facts, voice, and intended meaning.",
+    "developerName": "Siqi Chen",
+    "category": "Productivity",
+    "capabilities": ["Write"],
+    "defaultPrompt": "Humanize this text while preserving its meaning."
+  }
+}
