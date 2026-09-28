@@ -1,0 +1,9 @@
+{
+  "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
+  "name": "portable-agent-skills",
+  "version": "0.1.0",
+  "description": "Portable skills for Chat, Work, and Codex, starting with Humanizer.",
+  "author": {
+    "name": "Issei Matsuzoe"
+  }
+}

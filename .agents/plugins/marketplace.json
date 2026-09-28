@@ -5,10 +5,10 @@
   },
   "plugins": [
     {
-      "name": "humanizer",
+      "name": "portable-agent-skills",
       "source": {
         "source": "local",
-        "path": "./plugins/humanizer"
+        "path": "./plugins/portable-agent-skills"
       },
       "policy": {
         "installation": "AVAILABLE",

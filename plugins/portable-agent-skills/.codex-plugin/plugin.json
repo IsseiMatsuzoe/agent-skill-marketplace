@@ -1,0 +1,19 @@
+{
+  "name": "portable-agent-skills",
+  "version": "0.1.0",
+  "description": "Portable skills for Chat, Work, and Codex, starting with Humanizer.",
+  "author": {
+    "name": "Issei Matsuzoe"
+  },
+  "license": "MIT",
+  "skills": "./skills/",
+  "interface": {
+    "displayName": "Portable Agent Skills",
+    "shortDescription": "Portable skills for Chat, Work, and Codex.",
+    "longDescription": "A shared plugin for portable agent skills. Includes Humanizer v3.0.0.",
+    "developerName": "Issei Matsuzoe",
+    "category": "Productivity",
+    "capabilities": ["Write"],
+    "defaultPrompt": "Use Humanizer to revise this text while preserving its meaning."
+  }
+}
