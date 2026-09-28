@@ -1,7 +1,7 @@
 {
   "name": "portable-agent-skills",
-  "version": "0.1.0",
-  "description": "Portable skills for Chat, Work, and Codex, starting with Humanizer.",
+  "version": "0.2.0",
+  "description": "Portable skills for Chat, Work, and Codex: Humanizer and Natural Japanese.",
   "author": {
     "name": "Issei Matsuzoe"
   },
@@ -10,10 +10,10 @@
   "interface": {
     "displayName": "Portable Agent Skills",
     "shortDescription": "Portable skills for Chat, Work, and Codex.",
-    "longDescription": "A shared plugin for portable agent skills. Includes Humanizer v3.0.0.",
+    "longDescription": "A shared plugin with Humanizer v3.0.0 and Natural Japanese v1.5.0.",
     "developerName": "Issei Matsuzoe",
     "category": "Productivity",
     "capabilities": ["Write"],
-    "defaultPrompt": "Use Humanizer to revise this text while preserving its meaning."
+    "defaultPrompt": "Use the appropriate skill in this bundle for this writing task."
   }
 }
