@@ -1,6 +1,6 @@
 # Agent Skill Marketplace
 
-The **Personal** marketplace contains one plugin: **Portable Agent Skills** for Chat, Work, and Codex. It contains **Humanizer** and **Natural Japanese**. Use `@humanizer` or `@natural-japanese` to select a skill directly in ChatGPT. GitHub is the source of truth; installed plugins are snapshots that need refreshing after updates. No MCP server is included.
+The **Personal** marketplace contains one plugin: **Portable Agent Skills** for Chat, Work, and Codex. **Humanizer** and **Natural Japanese** are bundled internal skills. Install or select the plugin, then describe the task; the host uses the request intent and skill descriptions to choose the appropriate skill. ChatGPT may show only the plugin in its picker, so individual `@humanizer` and `@natural-japanese` entries are not guaranteed. GitHub is the source of truth; installed plugins are snapshots that need refreshing after updates. No MCP server is included.
 
 ## Contents
 
@@ -20,18 +20,20 @@ For a future Humanizer update, review the new upstream version and license, repl
 
 ## Natural Japanese source
 
-The included files are unchanged copies from [`coji/natural-japanese` v1.5.0](https://github.com/coji/natural-japanese/tree/v1.5.0/skills/natural-japanese), commit `21e632661a910bf97289c501089ad11eb8b4d85f`. Copyright © 2026 coji; its MIT license is included with the skill. The package includes the referenced materials, style template, and runtime scripts used by the skill. Development-only calibration and fixtures are excluded. The scripts use `uv` with declared dependencies when available; the skill also documents a manual review path when `uv` is unavailable. Its experimental semantic check is opt-in and may download a model.
+The included files are unchanged copies from [`coji/natural-japanese` v1.5.0](https://github.com/coji/natural-japanese/tree/v1.5.0/skills/natural-japanese), commit `21e632661a910bf97289c501089ad11eb8b4d85f`. Copyright © 2026 coji; its MIT license is included with the skill. The package includes the referenced materials, style template, and runtime scripts used by the skill. Development-only calibration and fixtures are excluded.
+
+In Codex and other hosts with script execution and `uv`, Natural Japanese can run `lint.py` and its other mechanical checks; its experimental semantic check is opt-in and may download a model. In ordinary Chat, iOS, or any host without arbitrary script execution, use the included `references/manual-checklist.md` review fallback. Script execution is optional and strengthens quality checks where available. No Natural Japanese-specific MCP server is included.
 
 ## Install from GitHub in the desktop Codex environment
 
 1. Add this GitHub repository as a marketplace: `codex plugin marketplace add IsseiMatsuzoe/agent-skill-marketplace --ref main`.
 2. Restart the ChatGPT desktop app. Open the Plugins Directory, select the **Personal** marketplace, and install **Portable Agent Skills**.
-3. Start a new chat and select **Humanizer** or **Natural Japanese** directly.
+3. Start a new chat with **Portable Agent Skills** selected and describe the writing task. The host chooses a bundled skill from the request intent and skill descriptions.
 
-After a GitHub update, run `codex plugin marketplace upgrade personal`, refresh or reinstall **Portable Agent Skills**, and start a new chat. Remove any previously installed standalone **Humanizer** plugin to avoid duplicate picker entries.
+After a GitHub update, run `codex plugin marketplace upgrade personal`, refresh or reinstall **Portable Agent Skills**, and start a new chat. An older standalone **Humanizer** plugin, if installed, may appear as a separate picker entry.
 
 ## Install in ChatGPT Web
 
-Package the contents of `plugins/portable-agent-skills/` as a ZIP with `plugin.json` at the ZIP root. In ChatGPT, open **Plugins → Add → Upload plugin archive**, select that ZIP, and install **Portable Agent Skills**. In a new chat, type `@humanizer` or `@natural-japanese` and select the corresponding skill. Uninstall the old standalone **Humanizer** plugin if it is still installed.
+Package the contents of `plugins/portable-agent-skills/` as a ZIP with `plugin.json` at the ZIP root. Upload it to install or update the existing **Portable Agent Skills** plugin in ChatGPT. In a new chat, select the plugin if needed and describe the task; the internal skill is chosen from the request intent and skill descriptions. Individual skills may not appear in the `@` picker.
 
-The ChatGPT upload is a snapshot. Pushing GitHub changes does not update that cloud copy automatically; upload and install a new archive after each reviewed update. A GitHub marketplace alone does not publish the plugin to the universal directory.
+The ChatGPT upload is a snapshot. Pushing GitHub changes does not update that cloud copy automatically; update the existing plugin with a new archive after each reviewed update. A GitHub marketplace alone does not publish the plugin to the universal directory.
