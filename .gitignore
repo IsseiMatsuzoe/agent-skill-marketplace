@@ -1,8 +1,1 @@
-node_modules/
-.local/
-dist/
-.env
-.env.*
-!.env.example
-*.log
-__pycache__/
+node_modules/\n.local/\ndist/\n.env\n.env.*\n!.env.example\n*.log\n__pycache__/\n.venv/\n
