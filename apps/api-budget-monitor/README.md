@@ -107,7 +107,7 @@ The unit tests do not call paid/provider APIs:
 
 ```powershell
 python -m unittest discover -s tests -v
-python -m py_compile app.py api_budget_monitor\*.py
+python -m compileall -q app.py api_budget_monitor
 ```
 
 Provider references:
