@@ -15,7 +15,7 @@
       "privacy_profile": "direct",
       "default_depth": "standard",
       "default_max_output_tokens": 2048,
-      "max_output_tokens": 4096,
+      "max_output_tokens": 8192,
       "enabled": true,
       "premium": false
     },
