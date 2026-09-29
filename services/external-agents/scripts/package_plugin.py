@@ -7,7 +7,7 @@ from zipfile import ZipFile, ZIP_DEFLATED
 
 ROOT = Path(__file__).resolve().parents[3]
 PLUGIN = ROOT / "plugins" / "external-agents"
-FILES = ["plugin.json", "mcp.json", ".codex-plugin/plugin.json", ".mcp.json"] + [
+FILES = ["plugin.json", "mcp.json", ".codex-plugin/plugin.json", ".mcp.json", "scripts/relay.mjs"] + [
     f"skills/{name}/SKILL.md" for name in
     ("ask-claude", "design-review", "x-research", "ask-external-agent")
 ]
@@ -21,15 +21,17 @@ def build(output, endpoint=None, skills_only=False):
             raise ValueError("Use a credential-free HTTPS endpoint URL")
     files = {name: (PLUGIN / name).read_bytes() for name in FILES}
     if skills_only:
+        del files["scripts/relay.mjs"]
         del files["mcp.json"]
         del files[".mcp.json"]
         compat = json.loads(files[".codex-plugin/plugin.json"])
         compat.pop("mcpServers", None)
         files[".codex-plugin/plugin.json"] = json.dumps(compat, indent=2).encode()
     elif endpoint:
+        del files["scripts/relay.mjs"]
         for name in ("mcp.json", ".mcp.json"):
             config = json.loads(files[name])
-            config["mcpServers"]["external_agents"]["url"] = endpoint
+            config["mcpServers"]["external_agents"] = {"type": "streamable-http" if name == "mcp.json" else "http", "url": endpoint}
             files[name] = json.dumps(config, indent=2).encode()
     output.parent.mkdir(parents=True, exist_ok=True)
     with ZipFile(output, "w", ZIP_DEFLATED) as archive:

@@ -1,8 +1,12 @@
 {
   "mcpServers": {
     "external_agents": {
-      "type": "http",
-      "url": "http://127.0.0.1:47831/mcp"
+      "type": "stdio",
+      "command": "node",
+      "args": [
+        "scripts/relay.mjs"
+      ],
+      "cwd": "."
     }
   }
 }

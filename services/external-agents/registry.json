@@ -1,13 +1,154 @@
 {
   "version": 1,
   "agents": [
-    { "alias": "claude", "backend": "anthropic", "model": "claude-sonnet-5-5", "capabilities": ["general", "design", "review", "rewrite", "image"], "selection_policy": "auto_allowed", "privacy_profile": "direct", "default_depth": "standard", "default_max_output_tokens": 2048, "max_output_tokens": 4096, "enabled": true, "premium": false },
-    { "alias": "grok", "backend": "xai", "model": "grok-4.7", "capabilities": ["general", "design", "review", "rewrite", "x_research"], "selection_policy": "auto_allowed", "privacy_profile": "direct", "default_depth": "standard", "default_max_output_tokens": 2048, "max_output_tokens": 4096, "max_search_turns": 2, "enabled": true, "premium": false },
-    { "alias": "gemini", "backend": "openrouter", "model": "google/gemini-3.1-flash-lite", "capabilities": ["general", "design", "review", "rewrite"], "selection_policy": "auto_allowed", "privacy_profile": "deny_collection", "default_depth": "standard", "default_max_output_tokens": 2048, "max_output_tokens": 4096, "enabled": true, "premium": false },
-    { "alias": "muse", "backend": "openrouter", "model": "meta/muse-spark-1.3", "capabilities": ["general", "design", "review", "rewrite"], "selection_policy": "auto_allowed", "privacy_profile": "deny_collection", "default_depth": "standard", "default_max_output_tokens": 2048, "max_output_tokens": 4096, "enabled": true, "premium": false },
-    { "alias": "kimi", "backend": "openrouter", "model": "moonshotai/kimi-k2.5", "capabilities": ["general", "design", "review", "rewrite"], "selection_policy": "explicit_only", "privacy_profile": "deny_collection", "default_depth": "standard", "default_max_output_tokens": 2048, "max_output_tokens": 4096, "enabled": true, "premium": false },
-    { "alias": "qwen", "backend": "openrouter", "model": "qwen/qwen3.6-flash", "capabilities": ["general", "design", "review", "rewrite"], "selection_policy": "explicit_only", "privacy_profile": "deny_collection", "default_depth": "standard", "default_max_output_tokens": 2048, "max_output_tokens": 4096, "enabled": true, "premium": false },
-    { "alias": "deepseek", "backend": "openrouter", "model": "deepseek/deepseek-v4.1-flash", "capabilities": ["general", "design", "review", "rewrite"], "selection_policy": "explicit_only", "privacy_profile": "deny_collection", "default_depth": "standard", "default_max_output_tokens": 2048, "max_output_tokens": 4096, "enabled": true, "premium": false },
-    { "alias": "experimental", "backend": "openrouter", "model": "", "capabilities": ["general"], "selection_policy": "explicit_only", "privacy_profile": "zdr", "default_depth": "standard", "default_max_output_tokens": 1024, "max_output_tokens": 2048, "enabled": false, "premium": false }
+    {
+      "alias": "claude",
+      "backend": "anthropic",
+      "model": "claude-sonnet-5-5",
+      "capabilities": [
+        "general",
+        "design",
+        "review",
+        "rewrite",
+        "image"
+      ],
+      "selection_policy": "auto_allowed",
+      "privacy_profile": "direct",
+      "default_depth": "standard",
+      "default_max_output_tokens": 2048,
+      "max_output_tokens": 4096,
+      "enabled": true,
+      "premium": false
+    },
+    {
+      "alias": "grok",
+      "backend": "xai",
+      "model": "grok-4.7",
+      "capabilities": [
+        "general",
+        "design",
+        "review",
+        "rewrite",
+        "x_research"
+      ],
+      "selection_policy": "auto_allowed",
+      "privacy_profile": "direct",
+      "default_depth": "standard",
+      "default_max_output_tokens": 2048,
+      "max_output_tokens": 4096,
+      "max_search_turns": 2,
+      "enabled": true,
+      "premium": false,
+      "output_limit_policy": "advisory",
+      "reasoning_defaults": {
+        "ordinary": "medium",
+        "retrieval": "low"
+      }
+    },
+    {
+      "alias": "gemini",
+      "backend": "openrouter",
+      "model": "google/gemini-3.1-flash-lite",
+      "capabilities": [
+        "general",
+        "design",
+        "review",
+        "rewrite"
+      ],
+      "selection_policy": "auto_allowed",
+      "privacy_profile": "deny_collection",
+      "default_depth": "standard",
+      "default_max_output_tokens": 2048,
+      "max_output_tokens": 4096,
+      "enabled": true,
+      "premium": false
+    },
+    {
+      "alias": "muse",
+      "backend": "openrouter",
+      "model": "meta/muse-spark-1.3",
+      "capabilities": [
+        "general",
+        "design",
+        "review",
+        "rewrite"
+      ],
+      "selection_policy": "auto_allowed",
+      "privacy_profile": "deny_collection",
+      "default_depth": "standard",
+      "default_max_output_tokens": 2048,
+      "max_output_tokens": 4096,
+      "enabled": true,
+      "premium": false
+    },
+    {
+      "alias": "kimi",
+      "backend": "openrouter",
+      "model": "moonshotai/kimi-k2.5",
+      "capabilities": [
+        "general",
+        "design",
+        "review",
+        "rewrite"
+      ],
+      "selection_policy": "explicit_only",
+      "privacy_profile": "deny_collection",
+      "default_depth": "standard",
+      "default_max_output_tokens": 2048,
+      "max_output_tokens": 4096,
+      "enabled": true,
+      "premium": false
+    },
+    {
+      "alias": "qwen",
+      "backend": "openrouter",
+      "model": "qwen/qwen3.6-flash",
+      "capabilities": [
+        "general",
+        "design",
+        "review",
+        "rewrite"
+      ],
+      "selection_policy": "explicit_only",
+      "privacy_profile": "deny_collection",
+      "default_depth": "standard",
+      "default_max_output_tokens": 2048,
+      "max_output_tokens": 4096,
+      "enabled": true,
+      "premium": false
+    },
+    {
+      "alias": "deepseek",
+      "backend": "openrouter",
+      "model": "deepseek/deepseek-v4.1-flash",
+      "capabilities": [
+        "general",
+        "design",
+        "review",
+        "rewrite"
+      ],
+      "selection_policy": "explicit_only",
+      "privacy_profile": "deny_collection",
+      "default_depth": "standard",
+      "default_max_output_tokens": 2048,
+      "max_output_tokens": 4096,
+      "enabled": true,
+      "premium": false
+    },
+    {
+      "alias": "experimental",
+      "backend": "openrouter",
+      "model": "",
+      "capabilities": [
+        "general"
+      ],
+      "selection_policy": "explicit_only",
+      "privacy_profile": "zdr",
+      "default_depth": "standard",
+      "default_max_output_tokens": 1024,
+      "max_output_tokens": 2048,
+      "enabled": false,
+      "premium": false
+    }
   ]
 }

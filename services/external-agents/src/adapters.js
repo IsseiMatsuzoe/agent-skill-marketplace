@@ -101,7 +101,7 @@ export function createAdapters(post = postJson) {
       };
     },
     async xai({ agent, input, key }) {
-      const body = { model: agent.model, input: [{ role: 'user', content: prompt(input) }], max_output_tokens: input.max_output_tokens, store: false };
+      const body = { model: agent.model, input: [{ role: 'user', content: `${prompt(input)}\nKeep the final answer within approximately ${input.max_output_tokens} tokens. This is an answer-length preference.` }], reasoning: { effort: input.reasoning_effort }, store: false };
       if (input.mode === 'x_research') {
         const f = input.x_search ?? {};
         body.tools = [{ type: 'x_search', enable_image_understanding: false, enable_video_understanding: false,

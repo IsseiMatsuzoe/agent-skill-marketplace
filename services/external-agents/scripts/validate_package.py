@@ -15,9 +15,10 @@ assert compat["skills"] == "./skills/"
 assert compat["mcpServers"] == "./.mcp.json"
 portable = json.loads((PLUGIN / "mcp.json").read_text())
 legacy = json.loads((PLUGIN / ".mcp.json").read_text())
-assert portable["mcpServers"]["external_agents"]["type"] == "streamable-http"
-assert legacy["mcpServers"]["external_agents"]["type"] == "http"
-assert portable["mcpServers"]["external_agents"]["url"] == legacy["mcpServers"]["external_agents"]["url"]
+assert portable["mcpServers"]["external_agents"]["type"] == "stdio"
+assert legacy["mcpServers"]["external_agents"]["command"] == "node"
+assert portable["mcpServers"]["external_agents"]["args"] == ["${PLUGIN_ROOT}/scripts/relay.mjs"]
+assert legacy["mcpServers"]["external_agents"]["args"] == ["scripts/relay.mjs"]
 catalog = json.loads((ROOT / ".agents/plugins/marketplace.json").read_text())
 assert [p["name"] for p in catalog["plugins"]] == ["portable-agent-skills", "external-agents"]
 for path in PLUGIN.glob("skills/*/SKILL.md"):
@@ -30,7 +31,7 @@ for name in FILES:
     assert not re.search(r"sk-(?:ant-|or-v1-)?[A-Za-z0-9_-]{20,}|xai-[A-Za-z0-9_-]{20,}|Bearer [A-Za-z0-9_-]{32,}", text)
 with tempfile.TemporaryDirectory() as directory:
     target = Path(directory) / "plugin.zip"
-    assert len(build(target)) == 8
+    assert len(build(target)) == 9
     assert len(build(target, skills_only=True)) == 6
     assert len(build(target, "https://mcp.example.org/mcp")) == 8
     try:

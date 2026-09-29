@@ -147,6 +147,24 @@ test('normal Grok has no search tool; unconfirmed search cannot succeed', async 
   const { gateway: noSearch } = setup({ adapters: createAdapters(async (_, __, body) => ({ model: body.model, output: [{ type: 'message', content: [{ type: 'output_text', text: 'Invented search result' }] }] })) });
   assert.equal((await noSearch({ agent: 'grok', task: 'search', mode: 'x_research' })).error.code, 'SEARCH_UNVERIFIED');
 });
+test('Grok uses conservative reasoning and advisory answer length without a billing ceiling', async () => {
+  const { gateway, calls } = setup();
+  for (const [extra, effort] of [[{}, 'medium'], [{ x_search: { kind: 'retrieval' } }, 'low'], [{ reasoning_effort: 'high' }, 'high']]) {
+    const result = await gateway({ agent: 'grok', task: 'discussion', mode: 'x_research', max_output_tokens: 8000, ...extra });
+    assert.equal(result.ok, true); assert.equal(result.policy.reasoning_effort, effort);
+    assert.equal(result.policy.output_limit_policy, 'advisory'); assert.equal(result.policy.guaranteed_cost_ceiling, false);
+    assert.equal(calls.at(-1).body.reasoning.effort, effort); assert.equal(calls.at(-1).body.max_output_tokens, undefined);
+    assert.equal(result.usage.cost.basis, 'unknown');
+  }
+  assert.equal(calls.length, 3);
+  const { gateway: measured } = setup({ adapters: createAdapters(async (_, __, body) => ({ ...fixture('xai', body.model), usage: {
+    input_tokens: 10000, output_tokens: 3000, output_tokens_details: { reasoning_tokens: 2500 },
+    server_side_tool_usage_details: { x_search_calls: 10, x_posts_fetched: 44, x_users_fetched: 0 },
+  } })) });
+  const result = await measured({ agent: 'grok', task: 'x', mode: 'x_research', max_output_tokens: 64 });
+  assert.equal(result.ok, true); assert.equal(result.usage.reasoning_tokens, 2500); assert.equal(result.usage.x_search_calls, 10);
+  assert.equal(result.usage.x_posts_fetched, 44); assert.equal(result.usage.x_users_fetched, 0);
+});
 test('provider HTTP errors, malformed JSON and timeout use safe errors with no retries', async () => {
   for (const [status, code] of [[401, 'AUTH_FAILED'], [429, 'RATE_LIMITED'], [500, 'PROVIDER_ERROR']]) {
     let n = 0;

@@ -46,40 +46,7 @@ Run `npm start` in a terminal. It binds only to `127.0.0.1:47831`; stop with Ctr
 
 ## Client connection and installation
 
-The repository marketplace lists **Portable Agent Skills** and **External Agents** independently. Refresh `personal` only after the reviewed branch is merged to its configured ref. Existing installed copies are snapshots; a push alone does not update them.
-
-The root `mcp.json` declares a local Streamable HTTP endpoint; `.mcp.json` and `.codex-plugin/plugin.json` support older clients. Root `plugin.json` is canonical and its `extensions.com.openai` presentation matches the compatibility overlay. No provider key is in either manifest. The backend is separate and is not packaged into the skill ZIP.
-
-**Authentication is client-managed.** Portable MCP 1.0 does not provide portable credential-reference fields; HTTP headers are literal data and must not contain secrets. Do not put `${API_KEY}` strings or actual bearer tokens into `mcp.json`. A host that cannot supply authentication to the bundled entry will see an authentication error until configured.
-
-For a local Codex client, a documented way to use client-managed credentials is to disable the plugin's bundled connection and create exactly one authenticated connection in your user `config.toml`:
-
-```toml
-[plugins."external-agents@personal".mcp_servers.external_agents]
-enabled = false
-
-[mcp_servers.external_agents]
-url = "http://127.0.0.1:47831/mcp"
-bearer_token_env_var = "EXTERNAL_AGENTS_MCP_TOKEN"
-tool_timeout_sec = 115
-default_tools_approval_mode = "prompt"
-```
-
-Use the plugin identifier reported by your installed marketplace if it differs. Do not add this second entry while leaving the bundled entry active. The Skill still calls the same logical tool; no provider logic changes. From the service directory, load only the generated MCP token into the local client's environment without printing it:
-
-```powershell
-$localTokenLine = Get-Content -LiteralPath .local/secrets.env | Where-Object { $_ -match '^EXTERNAL_AGENTS_MCP_TOKEN=' }
-$env:EXTERNAL_AGENTS_MCP_TOKEN = ($localTokenLine -split '=', 2)[1]
-codex
-```
-
-This affects the launched CLI process, not an already running desktop app. For the desktop app, set that variable through your private user environment settings and fully restart the app, or use its supported client credential configuration. Do not export provider keys to the host: only the service needs them. Work on another host needs a route to this same service; its `localhost` is not this PC. Real product pickup remains a separate manual test.
-
-For ChatGPT Web, `localhost` is not reachable. Connect the running service through an owner-configured [Secure MCP Tunnel](https://developers.openai.com/api/docs/guides/secure-mcp-tunnels) or an authenticated HTTPS deployment. A tunnel requires its own runtime credential, permissions and workspace association. **Tunnel-to-local bearer forwarding must be confirmed before connecting; never remove local authentication to make discovery work.** The current repository does not deploy a tunnel, OAuth server or public service. If the tunnel client cannot forward the local credential, connection is blocked pending a supported authenticated transport.
-
-Register the real connection in ChatGPT developer mode and obtain the real app mapping if the surface requires one. Do not fabricate `plugin_asdk_app...` IDs. This is a user-owned setup step, not a verified integration. The exact mapping and file download origins cannot be finalized without that connection. No public publication is requested.
-
-Build a local archive with `npm run package-plugin`. For a gateway connected separately, use `npm run package-plugin -- --skills-only`. For an already configured HTTPS gateway, use `npm run package-plugin -- --url https://YOUR-OWN-HOST/mcp`. Archives are allowlisted into ignored `dist/`; the source plugin is not rewritten. Uploading a ZIP does not provision the backend, credentials, registered app mapping or authentication.
+See [host installation and qualification](external-agents-hosts.md) for the exact Personal marketplace, local relay, paid gate, ChatGPT tunnel and attachment steps. The local package contains a stdio transport relay; the backend remains separate. Root `plugin.json`/`mcp.json` are portable, with Codex compatibility manifests. No credentials are packaged. Hosted ChatGPT needs a real remote connection and app association; installing a ZIP alone does not establish that connection.
 
 ## Registry and request contract
 
@@ -100,13 +67,13 @@ Defaults were selected on 2026-09-29. Claude uses Sonnet rather than a premium p
 
 `call_external_agent` accepts:
 
-- `agent`, `task`; optional `mode`, `context`, `depth`, `max_output_tokens`.
+- `agent`, `task`; optional `mode`, `context`, `depth`, `max_output_tokens`, `reasoning_effort`.
 - `user_requested_agent`: defaults false; true only when the user explicitly names the agent. The gateway enforces this for `explicit_only`; this is a **trusted caller attestation**, not cryptographic proof of the original conversation. Host approvals remain responsible for truthful user-intent provenance.
 - `attachments`: selected text files as `{name, text}`; no arbitrary filesystem reading. Binary documents are not supported.
 - `image_files`: host-provided OpenAI file objects; `asset_ids`: opaque local upload references. `visual_review: true` requires real images.
-- Optional `x_search` date/handle filters for `x_research` only.
+- Optional `x_search.kind` (`discussion` or `retrieval`) and date/handle filters for `x_research` only.
 
-Five modes are `general`, `design`, `review`, `x_research`, `rewrite`. `depth` (`brief`, `standard`, `deep`) controls requested answer detail, not provider-specific hidden reasoning budgets. Defaults are 2,048 output tokens with a 4,096 ceiling for enabled agents. Limits do not guarantee a fixed dollar cost. X Search uses at most two assistant/tool turns by default; turns do not bound posts, users or individual tool calls. Use provider dashboard limits as well. The gateway allows one concurrent inference, and each call makes one generation request. It has no daily quota ledger or deduplication across separate client calls; callers must not automatically retry timeouts or uncertain outcomes.
+Five modes are `general`, `design`, `review`, `x_research`, `rewrite`. `depth` (`brief`, `standard`, `deep`) controls requested answer detail, not provider-specific hidden reasoning budgets. The default answer length is 2,048 tokens. Anthropic/OpenRouter requests retain a 4,096 registry request limit; no provider limit guarantees a dollar cost. Grok uses an advisory answer-length preference and does not send a token budget. Its registry sets ordinary reasoning to medium and simple retrieval to low. High reasoning requires explicit user intent or a clearly demanding task; it never selects a more expensive model. `policy.guaranteed_cost_ceiling` is always false. X Search uses at most two assistant/tool turns by default; turns do not bound posts, users or individual tool calls. Use provider dashboard limits as well. The gateway allows one concurrent inference, and each call makes one generation request. It has no daily quota ledger or deduplication across separate client calls; callers must not automatically retry timeouts or uncertain outcomes.
 
 ## Privacy, image handling and normalized output
 
@@ -146,7 +113,7 @@ npm run smoke -- grok-x --allow-paid
 npm run smoke -- openrouter --allow-paid
 ```
 
-Before running, review the registry models and current provider prices. The script prints the test, selected model, output ceiling and call count; `--allow-paid` is an additional explicit gate, not a price estimate. Use a harmless image with content not stated in its filename or prompt; manually compare the answer with the image. These four tests have independent results. No premium model, deep search or retry is included. Successful local HTTP and mocks do not prove provider access or product integration.
+Before running, review the registry models and current provider prices. The script prints the test, selected model, output preference and call count; `--allow-paid` is an additional explicit gate, not a price estimate. Use a harmless image with content not stated in its filename or prompt; manually compare the answer with the image. These four tests have independent results. No premium model, deep search or retry is included. Successful local HTTP and mocks do not prove provider access or product integration.
 
 ## Sources and scope decisions
 
@@ -158,5 +125,5 @@ Official references checked on 2026-09-29:
 - [Agent Plugins MCP format and client-managed authentication](https://agent-plugins.org/plugin-authors/mcp-servers).
 - [Codex MCP client configuration](https://learn.chatgpt.com/docs/extend/mcp?surface=cli).
 - [Anthropic model IDs](https://platform.claude.com/docs/en/models/overview) and [vision](https://platform.claude.com/docs/en/build-with-claude/vision).
-- [xAI X Search](https://docs.x.ai/developers/tools/x-search), [citations](https://docs.x.ai/developers/tools/citations), [usage details](https://docs.x.ai/developers/tools/tool-usage-details).
+- [xAI reasoning effort](https://docs.x.ai/developers/model-capabilities/text/reasoning), [X Search](https://docs.x.ai/developers/tools/x-search), [citations](https://docs.x.ai/developers/tools/citations), [usage details](https://docs.x.ai/developers/tools/tool-usage-details).
 - [OpenRouter provider privacy routing](https://openrouter.ai/docs/guides/routing/provider-selection) and [public model catalog](https://openrouter.ai/api/v1/models).

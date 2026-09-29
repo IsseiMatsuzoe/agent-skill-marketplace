@@ -9,6 +9,7 @@
     "test": "node --test",
     "setup": "node src/cli.js setup",
     "doctor": "node src/cli.js doctor",
+    "connect-host": "node src/cli.js connect-host",
     "upload": "node src/cli.js upload",
     "check-models": "node src/cli.js check-models",
     "smoke": "node src/cli.js smoke",

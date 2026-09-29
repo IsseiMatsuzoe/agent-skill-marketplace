@@ -29,10 +29,13 @@ export function createGateway({ registry, env = {}, adapters = createAdapters(),
         fail('INVALID_INPUT', 'Search dates are reversed.');
       input.max_output_tokens ??= agent.default_max_output_tokens;
       input.depth ??= agent.default_depth;
-      if (input.max_output_tokens > agent.max_output_tokens) fail('BUDGET_BLOCKED', 'Requested output limit exceeds the registry ceiling.');
+      if (agent.output_limit_policy !== 'advisory' && input.max_output_tokens > agent.max_output_tokens) fail('BUDGET_BLOCKED', 'Requested output limit exceeds the registry request limit; this is not a billing ceiling.');
+      if (input.reasoning_effort && !agent.reasoning_defaults) fail('CAPABILITY_UNAVAILABLE', 'This logical agent does not expose reasoning effort control.');
+      input.reasoning_effort ??= agent.reasoning_defaults?.[input.mode === 'x_research' && input.x_search?.kind === 'retrieval' ? 'retrieval' : 'ordinary'];
       const policy = { selection: agent.selection_policy, privacy: agent.privacy_profile,
         data_collection: agent.backend === 'openrouter' ? 'deny' : null, zdr: agent.privacy_profile === 'zdr', cross_model_fallback: false,
-        depth: input.depth, max_output_tokens: input.max_output_tokens, x_search_max_turns: input.mode === 'x_research' ? agent.max_search_turns : null };
+        depth: input.depth, max_output_tokens: input.max_output_tokens, output_limit_policy: agent.output_limit_policy, guaranteed_cost_ceiling: false,
+        reasoning_effort: input.reasoning_effort ?? null, x_search_max_turns: input.mode === 'x_research' ? agent.max_search_turns : null };
       result.policy = policy;
       const key = env[keyNames[agent.backend]];
       if (!key?.trim()) fail('CONFIG_REQUIRED', `Set ${keyNames[agent.backend]} in the local secret file; never paste it into chat.`);
@@ -52,6 +55,7 @@ export function createGateway({ registry, env = {}, adapters = createAdapters(),
       Object.assign(result, candidate);
       if (input.depth !== 'standard') result.warnings.push('DEPTH_IS_ANSWER_DETAIL_NOT_A_COMPUTE_OR_PRICE_GUARANTEE');
       if (agent.backend !== 'openrouter') result.warnings.push('DIRECT_PROVIDER_RETENTION_DEPENDS_ON_ACCOUNT_TERMS');
+      if (agent.output_limit_policy === 'advisory') result.warnings.push('OUTPUT_LENGTH_IS_ADVISORY_NOT_A_BILLING_CEILING');
       if (input.visual_review) result.warnings.push('IMAGE_RECEIPT_MEANS_BYTES_INCLUDED_IN_ACCEPTED_REQUEST_NOT_PROOF_OF_UNDERSTANDING');
       if (!resultSchema.safeParse(result).success) fail('INVALID_PROVIDER_OUTPUT', 'Normalized provider output failed validation.');
     } catch (error) {

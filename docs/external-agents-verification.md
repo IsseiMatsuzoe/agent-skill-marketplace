@@ -1,14 +1,14 @@
 # External Agents verification
 
-Date: 2026-09-29. Audited base: `07565230180468846c08f6c47c56e62d87648238` (`main`). Local runtime: Windows, Node v22.15.0, npm 10.9.2, Python 3.12.3. No existing test framework, backend or repository `AGENTS.md` was present. Work is on `feat/external-agents` in a separate clean clone; no installed plugin configuration was changed.
+Date: 2026-09-29. Audited base: `07565230180468846c08f6c47c56e62d87648238` (`main`). Local runtime: Windows, Node v22.15.0, npm 10.9.2, Python 3.12.3. No existing test framework, backend or repository `AGENTS.md` was present. Work is on `feat/external-agents` in a separate clean clone; host integration is tracked separately below.
 
 ## Executed
 
 | Check | Result | Evidence / limit |
 | --- | --- | --- |
-| Unit/mock and local MCP suite | passed | `npm test`: 25 tests, 25 passed, 0 failed. Only loopback networking; provider calls replaced with mocks. |
+| Unit/mock and local MCP suite | passed | `npm test`: 28 tests, 28 passed, 0 failed. Only loopback networking; provider calls replaced with mocks. |
 | Routing and selection | passed | All seven enabled aliases; auto_allowed and explicit_only; disabled/invalid aliases; forbidden raw provider overrides. |
-| Privacy and budget | passed | Every OpenRouter request injects deny, optional ZDR; incompatible endpoint errors; no fallback/retry; output ceilings; premium configuration validation; concurrency. |
+| Privacy and budget | passed | Every OpenRouter request injects deny, optional ZDR; incompatible endpoint errors; no fallback/retry; provider request limits and Grok advisory output policy; premium configuration validation; concurrency. |
 | Images | passed | Decode, MIME, actual base64 request bytes and dimensions; local upload and file-object normalization; absent/expired/failed/partial image rejection. |
 | Download boundary | passed | Origin/scheme/userinfo/IP restrictions; DNS mixed-answer rejection at connect time; redirects rejected; byte overflow rejected. |
 | X Search | passed (mock) | Native tool and filters present; citations, handles, timestamps and fetched counts normalized; unconfirmed search rejected; known usage retained on verification failure. |
@@ -18,27 +18,35 @@ Date: 2026-09-29. Audited base: `07565230180468846c08f6c47c56e62d87648238` (`mai
 | Production entry startup | passed (local) | Starts with all provider keys absent and paid gate false, authenticated health succeeds, test-owned process stopped. |
 | Portable manifest and MCP schemas | passed | Validated against official Agent Plugins 1.0.0 schemas fetched that day using Python jsonschema. |
 | Plugin/Skill validators | passed | Bundled plugin validator: both plugins; bundled Skill validator: all four new Skills. |
-| Package boundary | passed | `python scripts/validate_package.py`; allowlist ZIP of 8 files (6 for skills-only), credential-bearing endpoint URL rejection, no backend or secrets packaged. |
+| Package boundary | passed | `python scripts/validate_package.py`; allowlist ZIP of 9 local files (8 remote; 6 skills-only), credential-bearing endpoint URL rejection, no backend or secrets packaged. |
 | Dependency audit | passed | `npm audit --omit=dev --audit-level=high`: 0 known vulnerabilities at check time. |
 | Public OpenRouter catalog | passed | `npm run check-models`, 2026-09-29T08:51:13Z: Gemini, Muse, Kimi, Qwen, DeepSeek configured IDs exist. No key or inference used. |
 | Existing plugin boundary | passed | `git diff --exit-code 0756523 -- plugins/portable-agent-skills` empty; catalog's existing entry preserved. |
 | Whitespace | passed | `git diff --check`. |
 
-## Not executed / owner setup
+## Provider qualification completed before this host phase
 
-| Test | Status | Required next condition |
+The owner accepted all four provider smoke tests as PASS. Each ran once through the common backend; none were rerun in the host phase.
+
+| Case | Result | Recorded evidence |
 | --- | --- | --- |
-| Claude text | not_run | Owner enters Anthropic key and explicitly enables paid testing. |
-| Claude actual image review | not_run | Same, plus harmless selected image and independent comparison of its visible content. Mock transfer does not prove live understanding. |
-| Grok native X Search | not_run | Owner enters xAI key and approves one bounded search. |
-| Inexpensive OpenRouter inference | not_run | Owner creates/enters OpenRouter key and enables paid testing; required privacy policy must remain in force. |
-| Privacy-compatible model endpoint availability | not_run | Live inference under deny / optional ZDR. Catalog existence is insufficient. |
-| Actual Codex/Work plugin pickup and invocation | not_run | Owner connects authenticated client and installs this reviewed plugin snapshot. SDK tests do not establish app pickup. |
-| ChatGPT Web/tunnel/app mapping | blocked: setup | Owner connection, tunnel permissions/credential/workspace association or authenticated HTTPS hosting. Confirm local bearer forwarding; no authentication bypass. |
-| Real ChatGPT attachment origins | blocked: setup | Observe an authorized attachment flow, allowlist its exact origin, then test transfer end-to-end. Defaults allow no remote download origin. |
-| iOS | not_run | Owner's actual device after successful ChatGPT connection. |
+| Claude text | PASS | input 89 / output 13 tokens |
+| Claude image | PASS | input 315 / output 261; actual image bytes delivered and visible shapes described |
+| Grok native X Search | PASS | input 84,572 / output 3,662 / reasoning 3,009; 10 search calls, 44 posts, 0 users |
+| OpenRouter Gemini with deny | PASS | input 52 / output 9; provider reported USD 0.0000265 |
 
-All provider keys are **missing in the newly prepared local secret file**, MCP token is present, and paid calls are **disabled**. No search for existing private key values was performed. No inference charges were incurred by this implementation run. Only the owner should enter keys in `services/external-agents/.local/secrets.env`; report `doctor` statuses, never the values.
+The Grok run demonstrated that an output request value and search-turn limit were not billing ceilings. The owner explicitly accepted this and requested conservative reasoning defaults instead. The updated adapter uses medium/low reasoning defaults and an advisory answer-length preference, with no retries or escalation. The new defaults have passed mocks; they have not yet been exercised with paid inference.
+
+## Host phase, current qualification
+
+- 28 local/mock tests passed, including the packaged stdio relay, authenticated image upload, common-tool discovery/call and safe transport failure.
+- Local production configuration: all three keys present_unverified; paid gate disabled; remote image origins empty. No secret values printed.
+- Codex installation and actual host invocation: pending this phase's qualification.
+- ChatGPT / Work: connection package and exact tunnel runbook prepared; no tunnel/account/app association or host call verified.
+- Chat -> MCP -> Claude attachment: unverified. A local fixture or provider smoke test does not prove this route.
+- The 0.2.0 local package replaces the unauthenticated HTTP manifest with a stdio relay. Client-managed bearer authentication is kept outside the package. Root portable and Codex compatibility manifests are both retained.
+
+See [host runbook](external-agents-hosts.md) for exact installation, paid enablement, tunnel and file-origin steps. No provider smoke retest is needed.
 
 ## Known limits
 
@@ -47,7 +55,7 @@ All provider keys are **missing in the newly prepared local secret file**, MCP t
 - `depth` requests answer detail, not a provider reasoning-effort setting. No automatic premium escalation exists.
 - No automatic retry or cross-model fallback. A timeout can have an unknown billable outcome. Separate repeated client requests are not deduplicated and no persistent daily budget is implemented; use provider spending limits.
 - Local assets are usable for 15 minutes, pruned on next access or service exit. No persisted images, native video, arbitrary binary documents or remote filesystem access.
-- The portable HTTP declaration cannot itself carry a secret reference. Client-managed authentication and live product configuration remain required. ChatGPT connection is not claimed complete.
+- Portable HTTP declarations cannot carry a portable secret reference. The local package now uses an authenticated transport relay; hosted ChatGPT still needs a real registered remote connection.
 
 ## Changed file groups
 

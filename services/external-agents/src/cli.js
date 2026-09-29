@@ -1,6 +1,7 @@
 import { mkdirSync, existsSync, readFileSync, writeFileSync, copyFileSync, statSync } from 'node:fs';
 import { join, extname } from 'node:path';
 import { randomBytes } from 'node:crypto';
+import { homedir } from 'node:os';
 import { root, local, loadConfig } from './config.js';
 import { keyNames } from './adapters.js';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
@@ -15,6 +16,14 @@ try {
     if (!existsSync(join(local, 'settings.json'))) writeFileSync(join(local, 'settings.json'), JSON.stringify({ port: 47831, file_download_origins: [] }, null, 2));
     if (!existsSync(join(local, 'registry.json'))) copyFileSync(join(root, 'registry.json'), join(local, 'registry.json'));
     console.log('Local setup prepared. Secret values were not displayed. Paid calls remain controlled by .local/secrets.env.');
+  } else if (command === 'connect-host') {
+    const { env, settings } = loadConfig();
+    if (!env.EXTERNAL_AGENTS_MCP_TOKEN || env.EXTERNAL_AGENTS_MCP_TOKEN.length < 32) throw new Error();
+    const directory = join(homedir(), '.config', 'external-agents');
+    mkdirSync(directory, { recursive: true, mode: 0o700 });
+    const path = join(directory, 'connection.json');
+    writeFileSync(path, JSON.stringify({ url: `http://127.0.0.1:${settings.port}/mcp`, token: env.EXTERNAL_AGENTS_MCP_TOKEN }), { mode: 0o600 });
+    console.log(JSON.stringify({ connection_file: path, provider_keys_copied: false, paid_calls_changed: false }));
   } else if (command === 'doctor') {
     const { registry, env, settings } = loadConfig();
     console.log(JSON.stringify({ node: process.version, registry: 'valid', agents: registry.agents.length,
