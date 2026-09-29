@@ -84,21 +84,22 @@ class ProviderCard(QFrame):
         top.addWidget(self.percent_label)
         layout.addLayout(top)
 
-        gauge_row = QHBoxLayout()
-        gauge_row.setSpacing(10)
         self.gauge = QProgressBar()
         self.gauge.setRange(0, 100)
         self.gauge.setTextVisible(False)
+        layout.addWidget(self.gauge)
+
+        meta_row = QHBoxLayout()
+        meta_row.setSpacing(10)
         self.amount_label = QLabel("Unavailable")
         self.amount_label.setObjectName("amount")
-        self.amount_label.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
-        gauge_row.addWidget(self.gauge, 1)
-        gauge_row.addWidget(self.amount_label)
-        layout.addLayout(gauge_row)
-
         self.status_label = QLabel("")
         self.status_label.setObjectName("muted")
-        layout.addWidget(self.status_label)
+        self.status_label.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
+        meta_row.addWidget(self.amount_label)
+        meta_row.addStretch(1)
+        meta_row.addWidget(self.status_label)
+        layout.addLayout(meta_row)
 
     def update_snapshot(self, snapshot: ProviderSnapshot) -> None:
         self.provider_label.setText(snapshot.display_name)
@@ -106,11 +107,14 @@ class ProviderCard(QFrame):
         self.gauge.setValue(snapshot.bar_percent)
 
         if snapshot.remaining_usd is None:
-            self.amount_label.setText("Unavailable")
+            amount_text = "Unavailable"
         else:
-            self.amount_label.setText(
-                f"{format_money(snapshot.remaining_usd)} / ${snapshot.reference_budget_usd:g}"
+            amount_text = (
+                f"{format_money(snapshot.remaining_usd)} of ${snapshot.reference_budget_usd:g}"
             )
+            if snapshot.balance_source == "manual":
+                amount_text += " · Manual"
+        self.amount_label.setText(amount_text)
 
         if snapshot.percent is None:
             self.gauge.setEnabled(False)
@@ -126,8 +130,6 @@ class ProviderCard(QFrame):
         until = compact_until(snapshot.key_valid_until)
         if until:
             state_text += f" · until {until}"
-        if snapshot.balance_source == "manual":
-            state_text += " · balance manual"
         self.status_label.setText(state_text)
         self.status_label.setToolTip(snapshot.detail or "")
 
