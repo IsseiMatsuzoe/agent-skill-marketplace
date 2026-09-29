@@ -1,10 +1,14 @@
 # Agent Skill Marketplace
 
-The **Personal** marketplace contains one plugin: **Portable Agent Skills** for Chat, Work, and Codex. **Humanizer** and **Natural Japanese** are bundled internal skills. Install or select the plugin, then describe the task; the host uses the request intent and skill descriptions to choose the appropriate skill. ChatGPT may show only the plugin in its picker, so individual `@humanizer` and `@natural-japanese` entries are not guaranteed. GitHub is the source of truth; installed plugins are snapshots that need refreshing after updates. No MCP server is included.
+The **Personal** marketplace contains two independently installable plugins: **Portable Agent Skills** and **External Agents** for Chat, Work, and Codex. **Portable Agent Skills** still bundles **Humanizer** and **Natural Japanese** without an MCP dependency. Install or select the plugin, then describe the task; the host uses the request intent and skill descriptions to choose the appropriate skill. ChatGPT may show only the plugin in its picker, so individual `@humanizer` and `@natural-japanese` entries are not guaranteed. GitHub is the source of truth; installed plugins are snapshots that need refreshing after updates.
+
+**External Agents** adds `ask-claude`, `design-review`, `x-research`, and `ask-external-agent`. They share one authenticated MCP tool, `call_external_agent`, with registry-controlled routing, selection and privacy. Its separate local service requires setup; installing the plugin does not start or deploy the backend. See [setup and architecture](docs/external-agents.md) and [verification status](docs/external-agents-verification.md). Paid calls are disabled by default. No files inside `plugins/portable-agent-skills` were changed for this addition.
 
 ## Contents
 
 - `.agents/plugins/marketplace.json`: the Personal marketplace catalog.
+- `plugins/external-agents/`: the separate External Agents portable package and thin workflow skills.
+- `services/external-agents/`: the gateway, registry, provider adapters, mock tests and local setup CLI.
 - `plugins/portable-agent-skills/plugin.json`: the portable plugin manifest.
 - `plugins/portable-agent-skills/.codex-plugin/plugin.json`: the Codex compatibility manifest and plugin display name.
 - `plugins/portable-agent-skills/skills/humanizer/SKILL.md`: the Humanizer skill.
