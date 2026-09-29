@@ -83,12 +83,19 @@ test('privacy-incompatible endpoint returns policy/availability error once', asy
   assert.equal(result.error.code, 'POLICY_OR_MODEL_UNAVAILABLE'); assert.equal(attempts, 1);
   assert.ok(!JSON.stringify([result, logs]).includes('secret-o'));
 });
-test('output ceilings and depth do not escalate the model', async () => {
+test('Claude accepts its explicit output ceiling without changing other routes', async () => {
   const { gateway, calls } = setup();
   assert.equal((await gateway({ agent: 'claude', task: 'hard', depth: 'deep' })).ok, true);
   assert.equal(calls[0].body.model, registry.agents[0].model); assert.equal(calls[0].body.max_tokens, 2048);
-  assert.equal((await gateway({ agent: 'claude', task: 'x', max_output_tokens: 8000 })).error.code, 'BUDGET_BLOCKED');
-  assert.equal(calls.length, 1);
+  for (const limit of [4097, 8192]) {
+    const result = await gateway({ agent: 'claude', task: 'x', max_output_tokens: limit });
+    assert.equal(result.ok, true); assert.equal(result.backend, 'anthropic');
+    assert.equal(result.policy.max_output_tokens, limit);
+    assert.equal(calls.at(-1).backend, 'anthropic'); assert.equal(calls.at(-1).body.max_tokens, limit);
+  }
+  assert.equal((await gateway({ agent: 'claude', task: 'x', max_output_tokens: 8193 })).error.code, 'INVALID_INPUT');
+  assert.equal((await gateway({ agent: 'gemini', task: 'x', max_output_tokens: 4097 })).error.code, 'BUDGET_BLOCKED');
+  assert.equal(calls.length, 3);
 });
 test('registry rejects unsafe privacy, duplicates and capabilities', () => {
   for (const mutate of [r => r.agents.push(r.agents[0]), r => r.agents[2].privacy_profile = 'direct', r => r.agents[0].privacy_profile = 'deny_collection', r => r.agents[0].max_output_tokens = 64, r => r.agents[2].capabilities.push('image')]) {
