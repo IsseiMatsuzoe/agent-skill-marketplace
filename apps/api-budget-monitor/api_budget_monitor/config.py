@@ -55,7 +55,8 @@ def ensure_config(config_dir: Path) -> tuple[AppConfig, dict[str, str]]:
             "OPENROUTER_MANAGEMENT_KEY=\n"
             "XAI_API_KEY=\n"
             "XAI_MANAGEMENT_API_KEY=\n"
-            "XAI_TEAM_ID=\n",
+            "XAI_TEAM_ID=\n"
+            "XAI_API_KEY_ID=\n",
             encoding="utf-8",
         )
 
@@ -98,6 +99,7 @@ def load_env_file(path: Path) -> dict[str, str]:
         "XAI_API_KEY",
         "XAI_MANAGEMENT_API_KEY",
         "XAI_TEAM_ID",
+        "XAI_API_KEY_ID",
     ):
         if os.getenv(key):
             values[key] = os.environ[key]
