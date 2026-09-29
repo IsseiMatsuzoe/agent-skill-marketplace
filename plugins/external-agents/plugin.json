@@ -1,0 +1,29 @@
+{
+  "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
+  "name": "external-agents",
+  "version": "0.2.0+codex.20260929125553",
+  "description": "Ask external specialists through one policy-controlled gateway.",
+  "author": {
+    "name": "Issei Matsuzoe"
+  },
+  "repository": "https://github.com/IsseiMatsuzoe/agent-skill-marketplace",
+  "extensions": {
+    "com.openai": {
+      "interface": {
+        "displayName": "External Agents",
+        "shortDescription": "External reasoning, design review and X research.",
+        "longDescription": "Four workflows use a common external-agent gateway. Local server setup and client authentication are required. Calls may incur provider charges.",
+        "developerName": "Issei Matsuzoe",
+        "category": "Productivity",
+        "capabilities": [
+          "Read"
+        ],
+        "defaultPrompt": [
+          "Ask Claude for a second opinion.",
+          "Review this screenshot.",
+          "Research recent developer discussion on X."
+        ]
+      }
+    }
+  }
+}

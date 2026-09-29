@@ -1,0 +1,24 @@
+{
+  "name": "external-agents-gateway",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "engines": { "node": ">=22.15.0" },
+  "scripts": {
+    "start": "node src/server.js",
+    "test": "node --test",
+    "setup": "node src/cli.js setup",
+    "doctor": "node src/cli.js doctor",
+    "connect-host": "node src/cli.js connect-host",
+    "upload": "node src/cli.js upload",
+    "check-models": "node src/cli.js check-models",
+    "smoke": "node src/cli.js smoke",
+    "package-plugin": "python scripts/package_plugin.py"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "1.31.0",
+    "ipaddr.js": "2.2.0",
+    "sharp": "0.35.5",
+    "zod": "3.25.76"
+  }
+}

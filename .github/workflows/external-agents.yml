@@ -1,0 +1,29 @@
+name: External Agents local checks
+on:
+  push:
+    paths: ['services/external-agents/**', 'plugins/external-agents/**', '.agents/plugins/marketplace.json', '.github/workflows/external-agents.yml']
+  pull_request:
+    paths: ['services/external-agents/**', 'plugins/external-agents/**', '.agents/plugins/marketplace.json', '.github/workflows/external-agents.yml']
+permissions:
+  contents: read
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: services/external-agents
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: services/external-agents/package-lock.json
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: npm ci --ignore-scripts --no-audit --no-fund
+      - run: npm test
+      - run: python scripts/validate_package.py

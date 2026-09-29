@@ -1,0 +1,12 @@
+{
+  "mcpServers": {
+    "external_agents": {
+      "type": "stdio",
+      "command": "node",
+      "args": [
+        "scripts/relay.mjs"
+      ],
+      "cwd": "."
+    }
+  }
+}
