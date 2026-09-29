@@ -84,25 +84,16 @@ class ProviderCard(QFrame):
         top.addWidget(self.percent_label)
         layout.addLayout(top)
 
-        money_row = QHBoxLayout()
-        self.money_label = QLabel("Unavailable")
-        self.money_label.setObjectName("money")
-        self.budget_label = QLabel("")
-        self.budget_label.setObjectName("muted")
-        money_row.addWidget(self.money_label)
-        money_row.addStretch(1)
-        money_row.addWidget(self.budget_label, alignment=Qt.AlignBottom)
-        layout.addLayout(money_row)
-
         gauge_row = QHBoxLayout()
+        gauge_row.setSpacing(10)
         self.gauge = QProgressBar()
         self.gauge.setRange(0, 100)
         self.gauge.setTextVisible(False)
-        self.overflow_label = QLabel("")
-        self.overflow_label.setObjectName("overflow")
-        self.overflow_label.hide()
+        self.amount_label = QLabel("Unavailable")
+        self.amount_label.setObjectName("amount")
+        self.amount_label.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
         gauge_row.addWidget(self.gauge, 1)
-        gauge_row.addWidget(self.overflow_label)
+        gauge_row.addWidget(self.amount_label)
         layout.addLayout(gauge_row)
 
         self.status_label = QLabel("")
@@ -111,21 +102,20 @@ class ProviderCard(QFrame):
 
     def update_snapshot(self, snapshot: ProviderSnapshot) -> None:
         self.provider_label.setText(snapshot.display_name)
-        self.money_label.setText(format_money(snapshot.remaining_usd))
         self.percent_label.setText(format_percent(snapshot.percent))
-        self.budget_label.setText(f"of ${snapshot.reference_budget_usd:g} reference")
         self.gauge.setValue(snapshot.bar_percent)
+
+        if snapshot.remaining_usd is None:
+            self.amount_label.setText("Unavailable")
+        else:
+            self.amount_label.setText(
+                f"{format_money(snapshot.remaining_usd)} / ${snapshot.reference_budget_usd:g}"
+            )
 
         if snapshot.percent is None:
             self.gauge.setEnabled(False)
         else:
             self.gauge.setEnabled(True)
-
-        if snapshot.overflow_percent > 0:
-            self.overflow_label.setText(f"+{format_percent(snapshot.overflow_percent)}")
-            self.overflow_label.show()
-        else:
-            self.overflow_label.hide()
 
         state_text = {
             KeyState.ACTIVE: "Key active",
