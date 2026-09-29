@@ -3,6 +3,7 @@ import json
 import re
 import subprocess
 import tempfile
+from zipfile import ZipFile
 from pathlib import Path
 from package_plugin import ROOT, PLUGIN, FILES, build
 
@@ -34,6 +35,23 @@ with tempfile.TemporaryDirectory() as directory:
     assert len(build(target)) == 9
     assert len(build(target, skills_only=True)) == 6
     assert len(build(target, "https://mcp.example.org/mcp")) == 8
+    with ZipFile(target) as archive:
+        remote = json.loads(archive.read("mcp.json"))["mcpServers"]["external_agents"]
+        assert remote == {"type": "streamable-http", "url": "https://mcp.example.org/mcp"}
+        assert "scripts/relay.mjs" not in archive.namelist()
+    # Synthetic mapping only in this temporary test archive, never a distributable package.
+    assert len(build(target, app_id="asdk_app_test_fixture")) == 7
+    with ZipFile(target) as archive:
+        assert json.loads(archive.read("plugin.json"))["extensions"]["com.openai"]["apps"] == "./.app.json"
+        assert json.loads(archive.read(".app.json"))["apps"]["external_agents"] == {"id": "asdk_app_test_fixture", "required": True}
+        assert not {"mcp.json", ".mcp.json", "scripts/relay.mjs"}.intersection(archive.namelist())
+    for args in [{"app_id": "sk-not-an-app-id"}, {"app_id": "asdk_app_test_fixture", "skills_only": True}]:
+        try:
+            build(target, **args)
+        except ValueError:
+            pass
+        else:
+            raise AssertionError("Invalid app packaging accepted")
     try:
         build(target, "https://mcp.example.org/mcp?token=secret")
     except ValueError:

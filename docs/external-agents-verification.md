@@ -41,12 +41,41 @@ The Grok run demonstrated that an output request value and search-turn limit wer
 
 - 28 local/mock tests passed, including the packaged stdio relay, authenticated image upload, common-tool discovery/call and safe transport failure.
 - Local production configuration: all three keys present_unverified; paid gate disabled; remote image origins empty. No secret values printed.
-- Codex installation and actual host invocation: pending this phase's qualification.
-- ChatGPT / Work: connection package and exact tunnel runbook prepared; no tunnel/account/app association or host call verified.
+- Codex installed as `external-agents@personal` 0.2.0 from GitHub branch `feat/external-agents`. CLI `0.158.0-alpha.2.1` exercised all four Skills and the common tool; see results below. Desktop fresh-chat invocation remains separate.
+- ChatGPT / Work: local and skills-only archives prepared; `--app-id` packaging is implemented and tested with an isolated synthetic mapping. A final mapped archive awaits the real registered app ID. Official Windows tunnel-client 0.0.15 is downloaded and its help tested; no tunnel/account/app association or Chat/Work call verified.
 - Chat -> MCP -> Claude attachment: unverified. A local fixture or provider smoke test does not prove this route.
 - The 0.2.0 local package replaces the unauthenticated HTTP manifest with a stdio relay. Client-managed bearer authentication is kept outside the package. Root portable and Codex compatibility manifests are both retained.
 
 See [host runbook](external-agents-hosts.md) for exact installation, paid enablement, tunnel and file-origin steps. No provider smoke retest is needed.
+
+## Actual Codex host results
+
+All four used `mcp__external_agents__call_external_agent` loaded from the installed Plugin, after reading the corresponding installed Skills. The owner explicitly enabled the existing paid gate for this qualification. These are **new host integration calls**, not provider smoke retests.
+
+| Installed Skill / case | Result | Gateway request ID | Usage / policy |
+| --- | --- | --- | --- |
+| ask-claude / text | PASS | `b565f33d-6e86-4cae-a04b-e43d1650c310` | Claude Sonnet 5.5; input 115, output 89 |
+| x-research / native X Search | PASS | `932f814e-958c-4874-aa2b-62c317d0ecb0` | Grok 4.7; low reasoning; input 26,006, output 1,461, reasoning 953, cached 18,560; x_search_calls 8, x_posts_fetched 16, x_users_fetched 0 |
+| ask-external-agent / Gemini | PASS | `141994da-4e35-45ce-a133-79a6d4b0616b` | Gemini 3.1 Flash Lite; deny_collection/data_collection=deny; input 57, output 74; reported cost USD 0.00012525 |
+| design-review / attached image | PASS after local upload permission correction | `4c29d794-d06d-4e72-aeac-3d511d3d0beb` | Claude Sonnet 5.5; input 354, output 213; one actual PNG 480x320 |
+
+Claude's image response correctly identified a red circle on the left, a blue rectangle in the upper right and a green triangle below it. The normalized image SHA-256 was `8a83d5cc60f117a174ddd21c5b322284d91c777e9bdd98555caa644a19e84bad`, matching the independent fixture check. The exact image was attached to Codex with `--image`; the installed Plugin upload helper transferred its bytes before the common MCP call. No visual description was inserted into the outbound task or context.
+
+The first upload attempt failed with sandbox `EPERM` before any image inference. The remaining image case succeeded using scoped automatic approval for the same installed helper. There were four provider calls in total and **zero inference retries**. The three ordinary MCP calls did not add confirmation prompts. A separate no-cost preflight reached `PAID_CALLS_DISABLED`, request `3cb81329-d93b-46f8-b05f-ff84a3efce8b`.
+
+Grok source metadata contained two `x.com/SpaceXAI/status/...` URLs, handles derived from those URLs and null timestamps. The requested filter was `allowed_handles: ["xai"]`; account alias/rename equivalence and factual claim accuracy were not independently verified. Native search execution is established, but strict account-filter interpretation and claims are not certified. No follow-up search was made.
+
+The test backend was stopped and `EXTERNAL_AGENTS_ENABLE_PAID=false` restored. The Plugin remains installed/enabled. Source files and installed files match after Git CRLF normalization. All 28 files in the existing installed Portable Agent Skills snapshot are byte-for-byte unchanged, and its enabled state remains true. The repository's Portable subtree is unchanged from the audited baseline.
+
+## Host / packaging issues discovered
+
+- A portable HTTP declaration alone could not supply the local bearer credential. The installed 0.2.0 package now uses a stdio-only transport relay; provider implementations remain shared.
+- Changing an existing Personal marketplace ref requires source remove/add in this CLI. Its GitHub source currently points to `feat/external-agents`, pending review/merge. No duplicate marketplace was created.
+- Windows sandbox shell access to the private connection file is denied. The image helper needs scoped host approval; text/search MCP calls work without that shell operation.
+- CLI startup logged a cache auto-refresh access-denied warning. Explicit install succeeded and all installed-code comparisons and calls passed. General automatic refresh reliability remains a host concern; the unrelated built-in plugin warnings were not altered.
+- Portable stdio is a local-host transport. Hosted ChatGPT requires a tunnel or authenticated HTTPS connection, plus the real app mapping. The tunnel command interface is checked; authenticated discovery and workspace association still require the owner.
+- The tested retrieval completed within the host's default tool timeout. Longer calls and hosted transport timeouts remain unqualified; uncertain outcomes must never trigger an automatic retry.
+- **Chat -> MCP -> Claude image transfer is not verified.** No Chat/Work attachment was substituted with the Codex result. Remote image origins remain empty until a real authorized host file flow identifies them.
 
 ## Known limits
 
