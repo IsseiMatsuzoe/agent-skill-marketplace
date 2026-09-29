@@ -1,5 +1,5 @@
 {
-  "version": 1,
+  "version": 2,
   "agents": [
     {
       "alias": "claude",
@@ -12,7 +12,6 @@
         "rewrite",
         "image"
       ],
-      "selection_policy": "auto_allowed",
       "privacy_profile": "direct",
       "default_depth": "standard",
       "default_max_output_tokens": 2048,
@@ -31,7 +30,6 @@
         "rewrite",
         "x_research"
       ],
-      "selection_policy": "auto_allowed",
       "privacy_profile": "direct",
       "default_depth": "standard",
       "default_max_output_tokens": 2048,
@@ -55,7 +53,6 @@
         "review",
         "rewrite"
       ],
-      "selection_policy": "auto_allowed",
       "privacy_profile": "deny_collection",
       "default_depth": "standard",
       "default_max_output_tokens": 2048,
@@ -73,7 +70,6 @@
         "review",
         "rewrite"
       ],
-      "selection_policy": "auto_allowed",
       "privacy_profile": "deny_collection",
       "default_depth": "standard",
       "default_max_output_tokens": 2048,
@@ -91,7 +87,6 @@
         "review",
         "rewrite"
       ],
-      "selection_policy": "explicit_only",
       "privacy_profile": "deny_collection",
       "default_depth": "standard",
       "default_max_output_tokens": 2048,
@@ -109,7 +104,6 @@
         "review",
         "rewrite"
       ],
-      "selection_policy": "explicit_only",
       "privacy_profile": "deny_collection",
       "default_depth": "standard",
       "default_max_output_tokens": 2048,
@@ -127,7 +121,6 @@
         "review",
         "rewrite"
       ],
-      "selection_policy": "explicit_only",
       "privacy_profile": "deny_collection",
       "default_depth": "standard",
       "default_max_output_tokens": 2048,
@@ -142,7 +135,6 @@
       "capabilities": [
         "general"
       ],
-      "selection_policy": "explicit_only",
       "privacy_profile": "zdr",
       "default_depth": "standard",
       "default_max_output_tokens": 1024,
@@ -150,5 +142,33 @@
       "enabled": false,
       "premium": false
     }
-  ]
+  ],
+  "routing": {
+    "direct": {
+      "anthropic": "auto_allowed",
+      "xai": "auto_allowed"
+    },
+    "openrouter": {
+      "approved_model_providers": [
+        "google",
+        "meta"
+      ],
+      "approved_providers": [
+        "google-vertex",
+        "google-ai-studio",
+        "meta"
+      ],
+      "explicit_providers": {
+        "moonshotai": [
+          "novita"
+        ],
+        "qwen": [
+          "alibaba"
+        ],
+        "deepseek": [
+          "deepseek"
+        ]
+      }
+    }
+  }
 }

@@ -13,7 +13,7 @@ export const inputSchema = z.object({
   mode: z.enum(modes).default('general'), context: z.string().max(64000).optional(),
   depth: z.enum(depths).optional(), max_output_tokens: z.number().int().min(64).max(8192).optional(),
   reasoning_effort: z.enum(['low', 'medium', 'high']).optional().describe('Optional reasoning preference. High only for explicit user intent or a clearly demanding task; never a billing guarantee.'),
-  user_requested_agent: z.boolean().default(false).describe('True only when the user explicitly named this logical agent. Caller attestation, not inferred from task difficulty.'),
+  user_requested_agent: z.boolean().default(false).describe('True only when the user explicitly requested this logical agent or its provider family. Caller attestation, not inferred from task difficulty.'),
   visual_review: z.boolean().default(false).describe('Require actual image transfer for visual critique.'),
   image_files: z.array(fileSchema).max(3).default([]),
   asset_ids: z.array(z.string().uuid()).max(3).default([]),
@@ -38,7 +38,7 @@ export const resultSchema = z.object({
   response: z.string().nullable(),
   sources: z.array(z.object({ url: z.string(), title: z.string().nullable(), handle: z.string().nullable(), timestamp: z.string().nullable(), provenance: z.literal('provider_citation'), handle_provenance: z.enum(['provider', 'derived_from_url']).nullable() }).strict()),
   usage: usageSchema.nullable(),
-  policy: z.object({ selection: z.string(), privacy: z.string(), data_collection: z.literal('deny').nullable(), zdr: z.boolean(), cross_model_fallback: z.literal(false), depth: z.enum(depths), max_output_tokens: z.number(), output_limit_policy: z.enum(['request_limit', 'advisory']), guaranteed_cost_ceiling: z.literal(false), reasoning_effort: z.enum(['low', 'medium', 'high']).nullable(), x_search_max_turns: z.number().nullable() }).strict().nullable(),
+  policy: z.object({ selection: z.enum(['auto_allowed', 'explicit_only']), provider_only: z.array(z.string()).nullable(), privacy: z.string(), data_collection: z.literal('deny').nullable(), zdr: z.boolean(), cross_model_fallback: z.literal(false), depth: z.enum(depths), max_output_tokens: z.number(), output_limit_policy: z.enum(['request_limit', 'advisory']), guaranteed_cost_ceiling: z.literal(false), reasoning_effort: z.enum(['low', 'medium', 'high']).nullable(), x_search_max_turns: z.number().nullable() }).strict().nullable(),
   images_sent: z.array(z.object({ id: z.string(), sha256: z.string(), width: z.number(), height: z.number(), mime_type: z.string() }).strict()),
   warnings: z.array(z.string()),
   error: z.object({ code: z.string(), message: z.string(), retryable: z.literal(false) }).strict().nullable(),
@@ -52,7 +52,6 @@ export function fail(code, message) { throw new GatewayError(code, message); }
 const record = z.object({
   alias: z.string().regex(/^[a-z][a-z0-9-]{0,63}$/), backend: z.enum(['anthropic', 'xai', 'openrouter']),
   model: z.string().max(200), capabilities: z.array(z.enum([...modes, 'image'])),
-  selection_policy: z.enum(['auto_allowed', 'explicit_only']),
   privacy_profile: z.enum(['direct', 'deny_collection', 'zdr']),
   default_depth: z.enum(depths), default_max_output_tokens: z.number().int().min(64).max(8192),
   max_output_tokens: z.number().int().min(64).max(8192), max_search_turns: z.number().int().min(1).max(5).optional(),
@@ -60,8 +59,18 @@ const record = z.object({
   reasoning_defaults: z.object({ ordinary: z.enum(['low', 'medium']), retrieval: z.enum(['low', 'medium']) }).strict().optional(),
   enabled: z.boolean(), premium: z.boolean(),
 }).strict();
+const providerId = z.string().regex(/^[a-z0-9]+(?:[/-][a-z0-9]+)*$/).max(128);
+const providerList = z.array(providerId).max(64).refine(ids => new Set(ids).size === ids.length);
+const routingSchema = z.object({
+  direct: z.object({ anthropic: z.enum(['auto_allowed', 'explicit_only']), xai: z.enum(['auto_allowed', 'explicit_only']) }).strict(),
+  openrouter: z.object({
+    approved_model_providers: z.array(z.string().regex(/^[a-z0-9-]+$/)).max(64),
+    approved_providers: providerList,
+    explicit_providers: z.record(z.string().regex(/^[a-z0-9-]+$/), providerList),
+  }).strict(),
+}).strict();
 export function validateRegistry(raw) {
-  const parsed = z.object({ version: z.literal(1), agents: z.array(record).min(1) }).strict().safeParse(raw);
+  const parsed = z.object({ version: z.literal(2), routing: routingSchema, agents: z.array(record).min(1) }).strict().safeParse(raw);
   if (!parsed.success) fail('CONFIG_REQUIRED', 'Invalid registry schema.');
   const aliases = new Set();
   for (const a of parsed.data.agents) {
@@ -78,8 +87,8 @@ export function validateRegistry(raw) {
       fail('CONFIG_REQUIRED', 'Update the Grok registry: advisory output policy and conservative reasoning defaults are required.');
     if (a.backend !== 'xai' && (a.output_limit_policy === 'advisory' || a.reasoning_defaults))
       fail('CONFIG_REQUIRED', 'Reasoning/advisory settings require a supporting adapter.');
-    if (a.premium && a.selection_policy !== 'explicit_only')
-      fail('CONFIG_REQUIRED', 'Premium profiles must require explicit selection.');
+    if (a.backend === 'openrouter' && a.enabled && !/^[a-z0-9-]+\/[^\s:]+$/.test(a.model))
+      fail('CONFIG_REQUIRED', 'OpenRouter requires a fixed provider/model ID without routing variants.');
   }
   return parsed.data;
 }

@@ -90,8 +90,8 @@ test('output ceilings and depth do not escalate the model', async () => {
   assert.equal((await gateway({ agent: 'claude', task: 'x', max_output_tokens: 8000 })).error.code, 'BUDGET_BLOCKED');
   assert.equal(calls.length, 1);
 });
-test('registry rejects unsafe privacy, duplicates, capabilities and premium auto selection', () => {
-  for (const mutate of [r => r.agents.push(r.agents[0]), r => r.agents[2].privacy_profile = 'direct', r => r.agents[0].privacy_profile = 'deny_collection', r => r.agents[0].premium = true, r => r.agents[0].max_output_tokens = 64, r => r.agents[2].capabilities.push('image')]) {
+test('registry rejects unsafe privacy, duplicates and capabilities', () => {
+  for (const mutate of [r => r.agents.push(r.agents[0]), r => r.agents[2].privacy_profile = 'direct', r => r.agents[0].privacy_profile = 'deny_collection', r => r.agents[0].max_output_tokens = 64, r => r.agents[2].capabilities.push('image')]) {
     const bad = structuredClone(registry); mutate(bad); assert.throws(() => validateRegistry(bad));
   }
 });

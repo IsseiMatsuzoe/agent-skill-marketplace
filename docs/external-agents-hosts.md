@@ -56,7 +56,7 @@ Hosted ChatGPT cannot reach this PC's localhost or run its stdio Plugin. Use [Se
 
 The owner must create a tunnel in [Platform tunnel settings](https://platform.openai.com/settings/organization/tunnels), associate the target ChatGPT workspace, and have Tunnels Read + Manage for creation and Read + Use for operation. Obtain `tunnel-client` from the link in Platform or the [official release page](https://github.com/openai/tunnel-client/releases/latest). Its runtime credential is separate from Anthropic, xAI and OpenRouter keys. Enter it locally, never in chat. Do not reuse a provider key as the tunnel credential.
 
-For this Windows checkout, the official v0.0.15 amd64 executable is already prepared at `services/external-agents/.local/tunnel-client/tunnel-client.exe`; its published SHA-256 was verified and its help interface was exercised. It is not added to PATH or packaged in the Plugin. No tunnel profile or remote tunnel has been created. For another checkout, download the current official release before the following steps.
+For this Windows checkout, the official v0.0.15 amd64 executable is already prepared at `services/external-agents/.local/tunnel-client/tunnel-client.exe`; its published SHA-256 was verified and its help interface was exercised. It is not added to PATH or packaged in the Plugin. A tunnel profile and remote tunnel were subsequently created and ChatGPT tool discovery passed; see the verification record. Reuse that setup rather than creating a duplicate. For another checkout, download the current official release before the following steps.
 
 In PowerShell, load the tunnel runtime credential without echoing it (paste only into the secure terminal prompt):
 
@@ -65,7 +65,7 @@ $tunnelSecret = Read-Host 'Tunnel runtime key (local input only)' -AsSecureStrin
 $env:CONTROL_PLANE_API_KEY = [System.Net.NetworkCredential]::new('', $tunnelSecret).Password
 $tunnelId = Read-Host 'Tunnel ID'
 $tunnelClient = (Resolve-Path .local/tunnel-client/tunnel-client.exe).Path
-$relayPath = (Resolve-Path ../../plugins/external-agents/scripts/relay.mjs).Path
+$relayPath = (Resolve-Path ../../plugins/external-agents/scripts/relay.mjs).Path.Replace('\', '/')
 & $tunnelClient init --sample sample_mcp_stdio_local --profile external-agents --tunnel-id $tunnelId --mcp-command ('node "' + $relayPath + '"')
 & $tunnelClient doctor --profile external-agents --explain
 & $tunnelClient run --profile external-agents

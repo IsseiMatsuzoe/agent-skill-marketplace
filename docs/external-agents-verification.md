@@ -97,3 +97,13 @@ The test backend was stopped and `EXTERNAL_AGENTS_ENABLE_PAID=false` restored. T
 - `.github/workflows/external-agents.yml`, `.gitignore`, `README.md`, and these two `docs/external-agents*.md`: CI, exclusions, architecture/setup and verification.
 
 The generated `.local` directory and `dist/external-agents.zip` remain ignored. `plugins/portable-agent-skills` is unchanged.
+
+## Provider trust and adaptive orchestration refinement (2026-09-29)
+
+Registry v2 separates direct-provider tiers, approved OpenRouter model publishers, approved serving hosts, and explicit-only family host routes from model versions. The gateway injects a nonempty `provider.only` list and retains deny, disabled fallback, optional ZDR and single-attempt behavior. No provider calls were made for this refinement.
+
+The updated suite passes 38 mock/local tests. Added cases cover promotion/demotion independent of model names, unreviewed families, empty lists, automatic exclusion of explicit-only host exceptions, premium selection, route failures without relaxation, malformed/legacy registry rejection, and unchanged multilingual prose/equations/code across adapters. Existing real-image transport and authenticated local MCP checks remain passing. This is structural and transport validation, not a live model-language quality evaluation or proof of new endpoint privacy compatibility.
+
+All Skills use one packaged English orchestration reference for adaptive referent/context selection, source preservation, response language, no additional trusted-route confirmation, truthful explicit-choice attestation, and evaluation of external results. The package now includes 10 local files, 9 HTTPS files, 7 skills-only files, or 8 registered-app files. No context-specific schema or host retrieval logic was added to the gateway.
+
+Before this refinement, the actual ChatGPT connection through Secure MCP Tunnel was created and showed Connected with exactly one discovered `call_external_agent` tool. Local tunnel health/readiness returned HTTP 200. This qualifies transport and discovery only; Chat provider inference, hosted Work, and Chat attachment-to-Claude remain unverified. The earlier Codex/provider smoke results apply to their tested configuration and have not been repeated. This refinement does not invoke provider APIs or change the owner paid-use switch. The local switch was observed enabled during migration; backend restart was held to avoid interrupting a concurrent test.

@@ -8,7 +8,7 @@ from zipfile import ZipFile, ZIP_DEFLATED
 
 ROOT = Path(__file__).resolve().parents[3]
 PLUGIN = ROOT / "plugins" / "external-agents"
-FILES = ["plugin.json", "mcp.json", ".codex-plugin/plugin.json", ".mcp.json", "scripts/relay.mjs"] + [
+FILES = ["plugin.json", "mcp.json", ".codex-plugin/plugin.json", ".mcp.json", "scripts/relay.mjs", "skills/orchestration.md"] + [
     f"skills/{name}/SKILL.md" for name in
     ("ask-claude", "design-review", "x-research", "ask-external-agent")
 ]

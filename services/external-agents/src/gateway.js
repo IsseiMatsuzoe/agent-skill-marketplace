@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { inputSchema, resultSchema, usageSchema, validateRegistry, fail, GatewayError } from './contracts.js';
 import { createAdapters, keyNames } from './adapters.js';
 import { ImageStore } from './images.js';
+import { resolveRouting } from './routing.js';
 
 export function createGateway({ registry, env = {}, adapters = createAdapters(), images = new ImageStore(), log = record => console.error(JSON.stringify(record)) }) {
   const config = validateRegistry(registry);
@@ -18,8 +19,7 @@ export function createGateway({ registry, env = {}, adapters = createAdapters(),
       if (!agent) fail('INVALID_AGENT', 'Unknown logical agent alias.');
       Object.assign(result, { agent: agent.alias, backend: agent.backend, model: agent.model || null });
       if (!agent.enabled) fail('AGENT_DISABLED', 'This logical agent is disabled in the registry.');
-      if (agent.selection_policy === 'explicit_only' && !input.user_requested_agent)
-        fail('EXPLICIT_REQUEST_REQUIRED', 'This agent requires the user to explicitly request it.');
+      const routing = resolveRouting(config, agent, input.user_requested_agent);
       if (!agent.capabilities.includes(input.mode)) fail('CAPABILITY_UNAVAILABLE', 'This agent does not support the requested mode.');
       if ((input.visual_review || input.asset_ids.length || input.image_files.length) && !agent.capabilities.includes('image'))
         fail('CAPABILITY_UNAVAILABLE', 'This agent adapter does not support image input.');
@@ -32,7 +32,7 @@ export function createGateway({ registry, env = {}, adapters = createAdapters(),
       if (agent.output_limit_policy !== 'advisory' && input.max_output_tokens > agent.max_output_tokens) fail('BUDGET_BLOCKED', 'Requested output limit exceeds the registry request limit; this is not a billing ceiling.');
       if (input.reasoning_effort && !agent.reasoning_defaults) fail('CAPABILITY_UNAVAILABLE', 'This logical agent does not expose reasoning effort control.');
       input.reasoning_effort ??= agent.reasoning_defaults?.[input.mode === 'x_research' && input.x_search?.kind === 'retrieval' ? 'retrieval' : 'ordinary'];
-      const policy = { selection: agent.selection_policy, privacy: agent.privacy_profile,
+      const policy = { ...routing, privacy: agent.privacy_profile,
         data_collection: agent.backend === 'openrouter' ? 'deny' : null, zdr: agent.privacy_profile === 'zdr', cross_model_fallback: false,
         depth: input.depth, max_output_tokens: input.max_output_tokens, output_limit_policy: agent.output_limit_policy, guaranteed_cost_ceiling: false,
         reasoning_effort: input.reasoning_effort ?? null, x_search_max_turns: input.mode === 'x_research' ? agent.max_search_turns : null };

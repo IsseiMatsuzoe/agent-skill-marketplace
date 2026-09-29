@@ -50,7 +50,7 @@ See [host installation and qualification](external-agents-hosts.md) for the exac
 
 ## Registry and request contract
 
-`services/external-agents/registry.json` contains the shipped defaults. After `setup`, edit `.local/registry.json` for owner configuration. Only backend adapters know endpoints and request formats. Registry validation rejects invalid privacy/backend combinations, duplicate aliases, unsupported capabilities and premium auto-selection. Changing a backend to a supported replacement does not require a Skill edit; a new provider API needs only an adapter plus backend validation/key mapping.
+`services/external-agents/registry.json` contains the shipped defaults. After `setup`, edit `.local/registry.json` for owner configuration. Only backend adapters know endpoints and request formats. Registry v2 rejects invalid privacy/backend combinations, duplicate aliases, unsupported capabilities, malformed endpoint allowlists and model routing variants. Premium profiles always require explicit selection. Changing a backend to a supported replacement does not require a Skill edit; a new provider API needs only an adapter plus backend validation/key mapping.
 
 | Alias | Backend | Default model | Selection |
 | --- | --- | --- | --- |
@@ -63,12 +63,33 @@ See [host installation and qualification](external-agents-hosts.md) for the exac
 | deepseek | OpenRouter | deepseek/deepseek-v4.1-flash | explicit_only |
 | experimental | OpenRouter | unset, disabled | explicit_only |
 
-Defaults were selected on 2026-09-29. Claude uses Sonnet rather than a premium profile; Gemini uses an inexpensive Flash Lite. The regular Muse variant is configured, not a contributor variant. Catalog existence does not establish key access, privacy compatibility or model quality. There is no fallback, automatic generation retry, model escalation or multi-agent loop. A future premium profile must be configured by the owner, enabled and marked `premium: true` with `explicit_only`.
+Defaults were selected on 2026-09-29. Claude uses Sonnet rather than a premium profile; Gemini uses an inexpensive Flash Lite. The regular Muse variant is configured, not a contributor variant. Catalog existence does not establish key access, privacy compatibility or model quality. There is no fallback, automatic generation retry, model escalation or multi-agent loop. A future premium profile must be configured by the owner, enabled and marked `premium: true`; the gateway then requires explicit selection independently of provider trust.
+
+### Provider trust and endpoint controls
+
+Trust is configured once under `routing`, independently of each agent's fixed `model` and capabilities. There is no per-agent `selection_policy` in v2:
+
+- `routing.direct` assigns Anthropic and xAI the `auto_allowed` tier by default. Either can be set to `explicit_only`.
+- `routing.openrouter.approved_model_providers` is the configurable model-publisher allowlist: initially `google` and `meta`. The publisher is the namespace before `/` in a fixed OpenRouter model ID, not the logical alias or a particular model release. Unlisted publishers default to `explicit_only`.
+- `routing.openrouter.approved_providers` independently limits actual inference hosts for automatic calls: initially `google-vertex`, `google-ai-studio`, and `meta`. Approving a model author does not approve arbitrary hosting companies.
+- `routing.openrouter.explicit_providers` pins optional family-specific hosts used only after explicit model/family selection. Initial routes are `moonshotai: ["novita"]`, `qwen: ["alibaba"]`, and `deepseek: ["deepseek"]`. These hosts are not promoted to automatic use. Their published endpoint IDs were checked on 2026-09-29; compatibility with `deny` is still determined by OpenRouter per request. An explicit family without a configured route remains restricted to the approved serving hosts.
+
+Promotion is an owner registry change after review: add the publisher and any reviewed serving host to the respective allowlists. Removing a publisher immediately restores explicit-only selection; removing a serving host prevents automatic use of that host. Changing a model within the same publisher does not change its trust tier. An empty applicable endpoint list returns `POLICY_OR_MODEL_UNAVAILABLE` before any transmission. An unavailable compatible endpoint returns a normal policy/availability error, with no consent loop, weaker privacy policy or substitute route.
+
+Automatic OpenRouter requests set `provider.only` to the approved serving hosts; explicitly named requests use the configured family route when present. Every route still sets `data_collection: "deny"`, `allow_fallbacks: false`, and `require_parameters: true`, plus ZDR when configured. Endpoint base slugs include their variants/regions under OpenRouter's documented matching rules; configure a full endpoint slug if regional scope must be narrower. Model routing suffixes such as `:free` are rejected; the model must remain fixed.
+
+For an existing v1 `.local/registry.json`, preserve the file before migrating: retain each agent's model, capabilities, limits, privacy and enabled state; remove per-agent `selection_policy`; add the reviewed `routing` block and set `version: 2`. Map any owner-specific selection restrictions into provider tiers/allowlists before restarting. Do not overwrite a customized registry with defaults. A v1 registry fails closed rather than silently inheriting automatic trust.
+
+### Host orchestration
+
+All four Skills load the packaged `skills/orchestration.md`. Instructions are primarily English; source material stays in its original language and form, and the host requests the response language appropriate to the user. The host interprets the current referent and selects useful context: relevant conversation excerpts, documents or connected resources are valid alongside code, equations and screenshots. There is no mandatory context template. The gateway does not infer context, retrieve files or translate material.
+
+Ordinary calls to trusted routes, including Claude and Grok, have no Plugin-level preflight or context-send confirmation. Existing platform consent still applies. Secrets and unrelated private material are excluded without prompting. The paid-use switch is an owner runtime setting, not a per-call consent requirement. Explicit-only errors are availability/policy results, not invitations to repeatedly ask for consent.
 
 `call_external_agent` accepts:
 
 - `agent`, `task`; optional `mode`, `context`, `depth`, `max_output_tokens`, `reasoning_effort`.
-- `user_requested_agent`: defaults false; true only when the user explicitly names the agent. The gateway enforces this for `explicit_only`; this is a **trusted caller attestation**, not cryptographic proof of the original conversation. Host approvals remain responsible for truthful user-intent provenance.
+- `user_requested_agent`: defaults false; true only when the user explicitly requests the agent or its provider family. The gateway enforces this for `explicit_only`; this is a **trusted caller attestation**, not cryptographic proof of the original conversation. Host approvals remain responsible for truthful user-intent provenance.
 - `attachments`: selected text files as `{name, text}`; no arbitrary filesystem reading. Binary documents are not supported.
 - `image_files`: host-provided OpenAI file objects; `asset_ids`: opaque local upload references. `visual_review: true` requires real images.
 - Optional `x_search.kind` (`discussion` or `retrieval`) and date/handle filters for `x_research` only.
@@ -77,7 +98,7 @@ Five modes are `general`, `design`, `review`, `x_research`, `rewrite`. `depth` (
 
 ## Privacy, image handling and normalized output
 
-Every OpenRouter request injects `provider.data_collection="deny"`, `allow_fallbacks=false`, and `require_parameters=true`. The optional `zdr` registry profile additionally injects `provider.zdr=true`. A named request for Kimi, Qwen or DeepSeek never changes those conditions. Privacy/availability errors terminate the request. Strict model mismatch checking also rejects unexpected models (Anthropic dated snapshots of the configured family are accepted).
+Every OpenRouter request injects its registry-selected `provider.only` allowlist, `provider.data_collection="deny"`, `allow_fallbacks=false`, and `require_parameters=true`. Enforcement is silent and centralized; callers cannot override provider fields. The optional `zdr` registry profile additionally injects `provider.zdr=true`. A named request for Kimi, Qwen or DeepSeek never changes those conditions. Privacy/availability errors terminate the request. Strict model mismatch checking also rejects unexpected models (Anthropic dated snapshots of the configured family are accepted).
 
 Direct provider retention is governed by your provider account terms; `direct` does not claim ZDR. xAI requests use `store:false`. Claude gets no execution or repository tools. X content is treated as reports, not authoritative specifications. Native search must be confirmed by completed search output or successful usage metadata; generation alone is not reported as a search.
 
@@ -91,7 +112,7 @@ This authenticates to `/assets`, returns an opaque `asset_id`, and stores the de
 
 For Chat file inputs, `_meta["openai/fileParams"]` advertises top-level `image_files`. Each item declares all four supported properties and requires only `download_url` and `file_id`. OpenAI file IDs are never treated as Anthropic file IDs. Download origins default to **none** in `.local/settings.json`. After an authorized real attachment flow identifies the origin, the owner may add its exact HTTPS origin. Downloads reject userinfo, private/reserved IPs, invalid MIME/decoding and all redirects. DNS is validated at socket connection time, avoiding a second unvalidated resolution. No raw paths, arbitrary network URLs or signed URLs are logged.
 
-Results contain request ID, logical agent, actual backend/model, text response, structured source metadata, normalized usage, applied policy, image evidence, warnings and typed error. Missing usage is null; missing individual metrics are null, not zero. Cost is `provider_reported` or `unknown`; the gateway does not fabricate estimates. Provider payloads, internal chain-of-thought and raw error bodies are not exposed. Logs allow only request ID, alias/backend/model, mode, timing, numeric usage/cost and result class. Prompt, response body, key, images and signed URLs are not logged by default. Host, tunnel and provider logging policies are separate.
+Results contain request ID, logical agent, actual backend/model, text response, structured source metadata, normalized usage, applied policy (including effective trust tier and serving-provider allowlist), image evidence, warnings and typed error. Missing usage is null; missing individual metrics are null, not zero. Cost is `provider_reported` or `unknown`; the gateway does not fabricate estimates. Provider payloads, internal chain-of-thought and raw error bodies are not exposed. Logs allow only request ID, alias/backend/model, mode, timing, numeric usage/cost and result class. Prompt, response body, key, images and signed URLs are not logged by default. Host, tunnel and provider logging policies are separate.
 
 ## Development checks and paid smoke plan
 

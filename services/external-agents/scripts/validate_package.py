@@ -32,15 +32,15 @@ for name in FILES:
     assert not re.search(r"sk-(?:ant-|or-v1-)?[A-Za-z0-9_-]{20,}|xai-[A-Za-z0-9_-]{20,}|Bearer [A-Za-z0-9_-]{32,}", text)
 with tempfile.TemporaryDirectory() as directory:
     target = Path(directory) / "plugin.zip"
-    assert len(build(target)) == 9
-    assert len(build(target, skills_only=True)) == 6
-    assert len(build(target, "https://mcp.example.org/mcp")) == 8
+    assert len(build(target)) == 10
+    assert len(build(target, skills_only=True)) == 7
+    assert len(build(target, "https://mcp.example.org/mcp")) == 9
     with ZipFile(target) as archive:
         remote = json.loads(archive.read("mcp.json"))["mcpServers"]["external_agents"]
         assert remote == {"type": "streamable-http", "url": "https://mcp.example.org/mcp"}
         assert "scripts/relay.mjs" not in archive.namelist()
     # Synthetic mapping only in this temporary test archive, never a distributable package.
-    assert len(build(target, app_id="asdk_app_test_fixture")) == 7
+    assert len(build(target, app_id="asdk_app_test_fixture")) == 8
     with ZipFile(target) as archive:
         assert json.loads(archive.read("plugin.json"))["extensions"]["com.openai"]["apps"] == "./.app.json"
         assert json.loads(archive.read(".app.json"))["apps"]["external_agents"] == {"id": "asdk_app_test_fixture", "required": True}
