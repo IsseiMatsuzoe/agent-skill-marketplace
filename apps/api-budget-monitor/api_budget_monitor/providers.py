@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 from dataclasses import dataclass
+from datetime import datetime, timezone
 from urllib.error import HTTPError, URLError
 from urllib.parse import quote
 from urllib.request import Request, urlopen
@@ -47,6 +48,21 @@ def _manual_balance(provider_cfg: dict) -> float | None:
         return None
 
 
+def _is_expired(value: str | None) -> bool:
+    if not value:
+        return False
+    text = value.strip().replace("Z", "+00:00")
+    if len(text) == 10:
+        text += "T23:59:59+00:00"
+    try:
+        parsed = datetime.fromisoformat(text)
+    except ValueError:
+        return False
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=timezone.utc)
+    return parsed <= datetime.now(timezone.utc)
+
+
 def fetch_openrouter(provider_cfg: dict, secrets: dict[str, str]) -> ProviderSnapshot:
     api_key = secrets.get("OPENROUTER_API_KEY", "")
     management_key = secrets.get("OPENROUTER_MANAGEMENT_KEY", "")
@@ -68,11 +84,13 @@ def fetch_openrouter(provider_cfg: dict, secrets: dict[str, str]) -> ProviderSna
                 detail = "Credits response missing totals"
         else:
             detail = credits.error or "Credits unavailable"
-    else:
-        remaining = _manual_balance(provider_cfg)
-        if remaining is not None:
+
+    if remaining is None:
+        manual = _manual_balance(provider_cfg)
+        if manual is not None:
+            remaining = manual
             balance_source = "manual"
-        else:
+        elif not management_key:
             detail = "Management key not configured"
 
     state = KeyState.MISSING
@@ -107,6 +125,7 @@ def fetch_xai(provider_cfg: dict, secrets: dict[str, str]) -> ProviderSnapshot:
     api_key = secrets.get("XAI_API_KEY", "")
     management_key = secrets.get("XAI_MANAGEMENT_API_KEY", "")
     team_id = secrets.get("XAI_TEAM_ID", "")
+    api_key_id = secrets.get("XAI_API_KEY_ID", "")
     remaining: float | None = None
     balance_source = "unavailable"
     detail: str | None = None
@@ -118,22 +137,26 @@ def fetch_xai(provider_cfg: dict, secrets: dict[str, str]) -> ProviderSnapshot:
         )
         if balance.status == 200 and isinstance(balance.payload, dict):
             try:
-                # xAI's documented examples represent prepaid credit as a negative accounting value.
+                # xAI documents prepaid credit as a negative accounting value:
+                # e.g. -1000 means $10.00 available.
                 cents = float(balance.payload["total"]["val"])
-                remaining = abs(cents) / 100.0
+                remaining = max(0.0, -cents / 100.0)
                 balance_source = "auto"
             except (KeyError, TypeError, ValueError):
                 detail = "Balance response missing total.val"
         else:
             detail = balance.error or "Prepaid balance unavailable"
-    else:
-        remaining = _manual_balance(provider_cfg)
-        if remaining is not None:
+
+    if remaining is None:
+        manual = _manual_balance(provider_cfg)
+        if manual is not None:
+            remaining = manual
             balance_source = "manual"
-        else:
+        elif not (management_key and team_id):
             detail = "Management key/team ID not configured"
 
     state = KeyState.MISSING
+    native_until = None
     if api_key:
         models = _get_json(
             "https://api.x.ai/v1/models",
@@ -146,13 +169,31 @@ def fetch_xai(provider_cfg: dict, secrets: dict[str, str]) -> ProviderSnapshot:
         else:
             state = KeyState.UNKNOWN
 
+    # When the owner supplies the API-key ID, management metadata gives us the
+    # authoritative disabled/expiry state without sending any inference request.
+    if management_key and team_id and api_key_id:
+        key_list = _get_json(
+            f"https://management-api.x.ai/auth/teams/{quote(team_id)}/api-keys?pageSize=100&activeOnly=false",
+            {"Authorization": f"Bearer {management_key}"},
+        )
+        if key_list.status == 200 and isinstance(key_list.payload, dict):
+            for item in key_list.payload.get("apiKeys", []):
+                if str(item.get("apiKeyId") or "") != api_key_id:
+                    continue
+                native_until = item.get("expireTime") or None
+                disabled = item.get("disabled", False)
+                if isinstance(disabled, str):
+                    disabled = disabled.lower() == "true"
+                state = KeyState.INVALID if disabled or _is_expired(native_until) else KeyState.ACTIVE
+                break
+
     return ProviderSnapshot(
         provider_id="xai",
         display_name=provider_cfg.get("display_name", "Grok"),
         remaining_usd=remaining,
         reference_budget_usd=float(provider_cfg.get("reference_budget_usd", 10.0)),
         key_state=state,
-        key_valid_until=_fallback_until(provider_cfg),
+        key_valid_until=_fallback_until(provider_cfg, native_until),
         balance_source=balance_source,
         detail=detail,
     )
@@ -200,5 +241,19 @@ def fetch_all(providers_cfg: dict[str, dict], secrets: dict[str, str]) -> list[P
     snapshots: list[ProviderSnapshot] = []
     for provider_id in ("anthropic", "xai", "openrouter"):
         cfg = providers_cfg.get(provider_id, {})
-        snapshots.append(fetchers[provider_id](cfg, secrets))
+        try:
+            snapshots.append(fetchers[provider_id](cfg, secrets))
+        except Exception as exc:
+            snapshots.append(
+                ProviderSnapshot(
+                    provider_id=provider_id,
+                    display_name=cfg.get("display_name", provider_id),
+                    remaining_usd=_manual_balance(cfg),
+                    reference_budget_usd=float(cfg.get("reference_budget_usd", 10.0)),
+                    key_state=KeyState.UNKNOWN,
+                    key_valid_until=_fallback_until(cfg),
+                    balance_source="manual" if _manual_balance(cfg) is not None else "unavailable",
+                    detail=f"Unexpected {type(exc).__name__}",
+                )
+            )
     return snapshots
