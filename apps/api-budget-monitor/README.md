@@ -4,7 +4,7 @@ A small Windows system-tray companion for the **External Agents** project. It is
 
 ## MVP behavior
 
-Each provider card answers one question: **how much usable credit remains relative to my own reference budget?**
+Each provider card answers one question: **how much usable credit remains relative to my own monthly reference budget?**
 
 - Set a `reference_budget_usd` per provider. `$10` means that amount is displayed as `100%`.
 - `$4` remaining against a `$10` reference displays `40%`.
@@ -24,7 +24,8 @@ Each provider card answers one question: **how much usable credit remains relati
 
 - Balance: `GET https://management-api.x.ai/v1/billing/teams/{team_id}/prepaid/balance` with `XAI_MANAGEMENT_API_KEY` and `XAI_TEAM_ID`.
 - Key status: `GET https://api.x.ai/v1/models` with `XAI_API_KEY`.
-- xAI's documented prepaid examples represent credit as a negative accounting value; the app presents its absolute USD value as remaining credit.
+- Optional native disabled/expiry state: set `XAI_API_KEY_ID`; the app reads the matching key from the Management API.
+- xAI's documented prepaid examples represent available credit as a negative accounting value; the app converts only that negative credit balance into positive USD remaining.
 
 ### Anthropic / Claude
 
@@ -32,19 +33,26 @@ Anthropic documents organization Usage/Cost APIs, but no individual-account prep
 
 This distinction is intentional: the UI does not fabricate a live Claude balance.
 
-## Run on Windows
+## Install on Windows
+
+From the repository root:
 
 ```powershell
 Set-Location apps/api-budget-monitor
-py -m venv .venv
-.\.venv\Scripts\Activate.ps1
-pip install -r requirements.txt
-python app.py
+.\scripts\install.ps1 -EnableStartup
 ```
 
-The first run creates local files under `%LOCALAPPDATA%\ApiBudgetMonitor`:
+Omit `-EnableStartup` if you do not want the monitor to start with Windows. The script creates a local `.venv`, installs PySide6, and writes `start-api-budget.cmd`.
 
-- `settings.json` — reference budgets, optional manual balance, rotation/expiry metadata.
+You can also run it manually:
+
+```powershell
+.\start-api-budget.cmd
+```
+
+On first start, the app creates local files under `%LOCALAPPDATA%\ApiBudgetMonitor`:
+
+- `settings.json` — reference budgets, optional manual Claude balance, rotation/expiry metadata.
 - `secrets.env` — API and management credentials. **Never commit this file.**
 
 The tray icon opens the compact budget popup. Right-click it to refresh, open Settings, or open the local config folder.
@@ -88,6 +96,7 @@ OPENROUTER_MANAGEMENT_KEY=
 XAI_API_KEY=
 XAI_MANAGEMENT_API_KEY=
 XAI_TEAM_ID=
+XAI_API_KEY_ID=
 ```
 
 Management credentials remain local to this app and are not sent to the External Agents gateway or packaged in the ChatGPT plugin.
@@ -98,4 +107,13 @@ The unit tests do not call paid/provider APIs:
 
 ```powershell
 python -m unittest discover -s tests -v
+python -m py_compile app.py api_budget_monitor\*.py
 ```
+
+Provider references:
+
+- <https://openrouter.ai/docs/api/api-reference/credits/get-credits>
+- <https://openrouter.ai/docs/api/api-reference/api-keys/get-current-key>
+- <https://docs.x.ai/developers/rest-api-reference/management/billing>
+- <https://docs.x.ai/developers/rest-api-reference/management/auth>
+- <https://platform.claude.com/docs/en/manage-claude/usage-cost-api>
