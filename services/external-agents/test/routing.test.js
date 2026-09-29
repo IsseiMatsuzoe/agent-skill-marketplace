@@ -131,7 +131,7 @@ test('registry rejects legacy trust, malformed routes and model routing variants
     r => r.routing.openrouter.approved_providers = ['*'],
     r => r.routing.openrouter.approved_providers = ['meta', 'meta'],
     r => r.routing.openrouter.explicit_providers.qwen = ['https://example.org'],
-    r => r.agents[2].model = 'qwen/unsafe-model:free']) {
+    r => r.agents.find(agent => agent.alias === 'qwen').model = 'qwen/unsafe-model:free']) {
     const registry = structuredClone(defaults); change(registry);
     assert.throws(() => validateRegistry(registry));
   }

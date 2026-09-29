@@ -5,7 +5,7 @@ description: Ask an external specialist for a useful second opinion, or fulfill 
 
 Read [shared orchestration](../orchestration.md) before selecting the task's referent and useful context.
 
-Honor a named specialist using its logical lowercase alias. For an automatic second opinion, choose a suitable configured specialist; the gateway determines whether its provider is approved. Clarify a genuinely ambiguous name. Never construct a provider endpoint or choose a model ID in this Skill.
+Honor a named specialist using its logical lowercase alias. Normal Claude uses `claude` (Sonnet); use `claude-opus` only when the user explicitly asks for Opus or the premium profile, and never escalate automatically. For an automatic second opinion, choose a suitable configured specialist; the gateway determines whether its provider is approved. Clarify a genuinely ambiguous name. Never construct a provider endpoint or choose a model ID in this Skill.
 
 Call `call_external_agent` with `agent`, `task`, relevant context, the appropriate `mode`, and truthful `user_requested_agent`. A request such as "Ask Kimi" is already an explicit choice; do not ask for another Plugin-level confirmation. Gateway policy still applies. For visual critique require actual supported images and `visual_review: true`.
 

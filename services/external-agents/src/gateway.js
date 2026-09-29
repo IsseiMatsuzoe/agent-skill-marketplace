@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
-import { inputSchema, resultSchema, usageSchema, validateRegistry, fail, GatewayError } from './contracts.js';
-import { createAdapters, keyNames } from './adapters.js';
+import { inputSchema, resultSchema, usageSchema, diagnosticsSchema, validateRegistry, fail, GatewayError } from './contracts.js';
+import { createAdapters, keyNames, timeoutProfileFor } from './adapters.js';
 import { ImageStore } from './images.js';
 import { resolveRouting } from './routing.js';
 
@@ -9,7 +9,7 @@ export function createGateway({ registry, env = {}, adapters = createAdapters(),
   let busy = false;
   return async function callExternalAgent(raw) {
     const start = Date.now();
-    const result = { request_id: randomUUID(), ok: false, agent: null, backend: null, model: null, response: null, sources: [], usage: null, policy: null, images_sent: [], warnings: [], error: null };
+    const result = { request_id: randomUUID(), ok: false, agent: null, backend: null, model: null, response: null, sources: [], usage: null, diagnostics: null, policy: null, images_sent: [], warnings: [], error: null };
     let locked = false; let mode = null;
     try {
       const parsed = inputSchema.safeParse(raw);
@@ -30,12 +30,24 @@ export function createGateway({ registry, env = {}, adapters = createAdapters(),
       input.max_output_tokens ??= agent.default_max_output_tokens;
       input.depth ??= agent.default_depth;
       if (agent.output_limit_policy !== 'advisory' && input.max_output_tokens > agent.max_output_tokens) fail('BUDGET_BLOCKED', 'Requested output limit exceeds the registry request limit; this is not a billing ceiling.');
-      if (input.reasoning_effort && !agent.reasoning_defaults) fail('CAPABILITY_UNAVAILABLE', 'This logical agent does not expose reasoning effort control.');
-      input.reasoning_effort ??= agent.reasoning_defaults?.[input.mode === 'x_research' && input.x_search?.kind === 'retrieval' ? 'retrieval' : 'ordinary'];
+      if (input.reasoning_effort && agent.backend === 'openrouter') fail('CAPABILITY_UNAVAILABLE', 'This logical agent does not expose reasoning effort control.');
+      if (agent.backend === 'anthropic') input.reasoning_effort ??= ({ brief: 'low', standard: 'medium', deep: 'high' })[input.depth];
+      else if (agent.backend === 'xai') {
+        if (!agent.reasoning_defaults) fail('CONFIG_REQUIRED', 'The Grok registry is missing provider-specific reasoning defaults.');
+        input.reasoning_effort ??= agent.reasoning_defaults[input.mode === 'x_research' && input.x_search?.kind === 'retrieval' ? 'retrieval' : 'ordinary'];
+      }
+      const timeoutProfile = agent.backend === 'openrouter' ? 'openrouter_sync_90s' : timeoutProfileFor(input);
+      const providerOutputPolicy = agent.backend === 'anthropic' ? 'answer_target'
+        : agent.backend === 'xai' ? 'prompt_preference' : 'hard_provider_limit';
+      const generationCeiling = agent.backend === 'anthropic' ? 128000
+        : agent.backend === 'openrouter' ? input.max_output_tokens : null;
       const policy = { ...routing, privacy: agent.privacy_profile,
         data_collection: agent.backend === 'openrouter' ? 'deny' : null, zdr: agent.privacy_profile === 'zdr', cross_model_fallback: false,
-        depth: input.depth, max_output_tokens: input.max_output_tokens, output_limit_policy: agent.output_limit_policy, guaranteed_cost_ceiling: false,
-        reasoning_effort: input.reasoning_effort ?? null, x_search_max_turns: input.mode === 'x_research' ? agent.max_search_turns : null };
+        depth: input.depth, max_output_tokens: input.max_output_tokens, answer_target_tokens: input.max_output_tokens,
+        provider_generation_ceiling: generationCeiling, provider_output_policy: providerOutputPolicy,
+        output_limit_policy: agent.output_limit_policy, guaranteed_cost_ceiling: false,
+        reasoning_effort: input.reasoning_effort ?? null, timeout_profile: timeoutProfile,
+        x_search_max_turns: input.mode === 'x_research' ? agent.max_search_turns : null };
       result.policy = policy;
       const key = env[keyNames[agent.backend]];
       if (!key?.trim()) fail('CONFIG_REQUIRED', `Set ${keyNames[agent.backend]} in the local secret file; never paste it into chat.`);
@@ -44,13 +56,16 @@ export function createGateway({ registry, env = {}, adapters = createAdapters(),
       busy = true; locked = true;
       const sent = await images.resolve(input);
       const normalized = await adapters[agent.backend]({ agent, input, images: sent, key, policy });
+      if (normalized.diagnostics && !diagnosticsSchema.safeParse(normalized.diagnostics).success)
+        fail('INVALID_PROVIDER_OUTPUT', 'Provider diagnostics failed validation.');
+      result.diagnostics = normalized.diagnostics ?? null;
       if (usageSchema.safeParse(normalized.usage).success) result.usage = normalized.usage;
       if (typeof normalized.response !== 'string' || !normalized.response.trim() || typeof normalized.model !== 'string' || !normalized.model)
         fail('INVALID_PROVIDER_OUTPUT', 'Provider returned no usable response or actual model.');
       const datedSnapshot = agent.backend === 'anthropic' && normalized.model.startsWith(`${agent.model}-`) && /^\d{8}$/.test(normalized.model.slice(agent.model.length + 1));
       if (normalized.model !== agent.model && !datedSnapshot)
         fail('MODEL_MISMATCH', 'Provider reported an unexpected model; no substitute is accepted.');
-      const candidate = { ...result, model: normalized.model, response: normalized.response, sources: normalized.sources, usage: normalized.usage, warnings: normalized.warnings, ok: true, images_sent: sent.map(({ bytes, ...metadata }) => metadata) };
+      const candidate = { ...result, model: normalized.model, response: normalized.response, sources: normalized.sources, usage: normalized.usage, diagnostics: normalized.diagnostics ?? null, warnings: normalized.warnings, ok: true, images_sent: sent.map(({ bytes, ...metadata }) => metadata) };
       if (!resultSchema.safeParse(candidate).success) fail('INVALID_PROVIDER_OUTPUT', 'Normalized provider output failed validation.');
       Object.assign(result, candidate);
       if (input.depth !== 'standard') result.warnings.push('DEPTH_IS_ANSWER_DETAIL_NOT_A_COMPUTE_OR_PRICE_GUARANTEE');
@@ -62,6 +77,7 @@ export function createGateway({ registry, env = {}, adapters = createAdapters(),
       // Never expose exceptions, request bodies, provider error payloads or signed URLs.
       result.ok = false; result.response = null; result.sources = []; result.images_sent = []; result.warnings = [];
       if (error instanceof GatewayError && usageSchema.safeParse(error.usage).success) result.usage = error.usage;
+      if (error instanceof GatewayError && diagnosticsSchema.safeParse(error.diagnostics).success) result.diagnostics = error.diagnostics;
       result.error = { code: error instanceof GatewayError ? error.code : 'PROVIDER_ERROR',
         message: error instanceof GatewayError ? error.message : 'External agent request failed; no retry was made.', retryable: false };
     } finally {
@@ -70,7 +86,7 @@ export function createGateway({ registry, env = {}, adapters = createAdapters(),
     const safe = resultSchema.parse(result);
     // Deliberately construct the log allowlist. Neither output nor exception objects reach logging.
     log({ request_id: safe.request_id, agent: safe.agent, backend: safe.backend, model: safe.model,
-      mode, elapsed_ms: Date.now() - start, usage: safe.usage, status: safe.ok ? 'success' : safe.error.code });
+      mode, elapsed_ms: Date.now() - start, usage: safe.usage, diagnostics: safe.diagnostics, status: safe.ok ? 'success' : safe.error.code });
     return safe;
   };
 }

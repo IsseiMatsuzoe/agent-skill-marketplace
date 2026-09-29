@@ -55,6 +55,7 @@ See [host installation and qualification](external-agents-hosts.md) for the exac
 | Alias | Backend | Default model | Selection |
 | --- | --- | --- | --- |
 | claude | Anthropic direct | claude-sonnet-5-5 | auto_allowed |
+| claude-opus | Anthropic direct | claude-opus-5-5 | explicit_only, premium |
 | grok | xAI direct | grok-4.7 | auto_allowed |
 | gemini | OpenRouter | google/gemini-3.1-flash-lite | auto_allowed |
 | muse | OpenRouter | meta/muse-spark-1.3 | auto_allowed |
@@ -63,7 +64,7 @@ See [host installation and qualification](external-agents-hosts.md) for the exac
 | deepseek | OpenRouter | deepseek/deepseek-v4.1-flash | explicit_only |
 | experimental | OpenRouter | unset, disabled | explicit_only |
 
-Defaults were selected on 2026-09-29. Claude uses Sonnet rather than a premium profile; Gemini uses an inexpensive Flash Lite. The regular Muse variant is configured, not a contributor variant. Catalog existence does not establish key access, privacy compatibility or model quality. There is no fallback, automatic generation retry, model escalation or multi-agent loop. A future premium profile must be configured by the owner, enabled and marked `premium: true`; the gateway then requires explicit selection independently of provider trust.
+Normal Claude use routes to Sonnet through `claude`. `claude-opus` is the enabled premium Opus profile and is explicit-only; the gateway does not escalate from Sonnet. The active Anthropic API model IDs are `claude-sonnet-5-5` and `claude-opus-5-5` ([Anthropic model lifecycle](https://docs.anthropic.com/en/docs/about-claude/model-deprecations)). Gemini uses an inexpensive Flash Lite, and the regular Muse variant is configured rather than a contributor variant. Catalog existence does not establish key access, privacy compatibility or model quality. There is no fallback, automatic generation retry, model escalation or multi-agent loop.
 
 ### Provider trust and endpoint controls
 
@@ -80,6 +81,8 @@ Automatic OpenRouter requests set `provider.only` to the approved serving hosts;
 
 For an existing v1 `.local/registry.json`, preserve the file before migrating: retain each agent's model, capabilities, limits, privacy and enabled state; remove per-agent `selection_policy`; add the reviewed `routing` block and set `version: 2`. Map any owner-specific selection restrictions into provider tiers/allowlists before restarting. Do not overwrite a customized registry with defaults. A v1 registry fails closed rather than silently inheriting automatic trust.
 
+This change keeps registry schema v2; no schema migration is required, and setup still never overwrites `.local/registry.json`. A local v2 registry remains the sole routing source. The existing local `claude` entry already uses `claude-sonnet-5-5`, so no Sonnet model edit is needed. To enable Opus in a customized local registry, manually add a v2 agent entry with these values: `alias: "claude-opus"`, `backend: "anthropic"`, `model: "claude-opus-5-5"`, `capabilities: ["general", "design", "review", "rewrite", "image"]`, `privacy_profile: "direct"`, `default_depth: "standard"`, `default_max_output_tokens: 2048`, `max_output_tokens: 8192`, `enabled: true`, and `premium: true`. Keep the existing `routing` block and other custom agents unchanged. Missing Opus configuration fails with `INVALID_AGENT`; an Opus model without the premium flag fails registry validation with `CONFIG_REQUIRED`. Neither case falls back to Sonnet or changes routing. The local registry is not edited by this PR.
+
 ### Host orchestration
 
 All four Skills load the packaged `skills/orchestration.md`. Instructions are primarily English; source material stays in its original language and form, and the host requests the response language appropriate to the user. The host interprets the current referent and selects useful context: relevant conversation excerpts, documents or connected resources are valid alongside code, equations and screenshots. There is no mandatory context template. The gateway does not infer context, retrieve files or translate material.
@@ -94,7 +97,13 @@ Ordinary calls to trusted routes, including Claude and Grok, have no Plugin-leve
 - `image_files`: host-provided OpenAI file objects; `asset_ids`: opaque local upload references. `visual_review: true` requires real images.
 - Optional `x_search.kind` (`discussion` or `retrieval`) and date/handle filters for `x_research` only.
 
-Five modes are `general`, `design`, `review`, `x_research`, `rewrite`. `depth` (`brief`, `standard`, `deep`) controls requested answer detail, not provider-specific hidden reasoning budgets. The default answer length is 2,048 tokens. Claude accepts explicit requests up to 8,192 tokens; OpenRouter agents retain a 4,096 registry request limit. No provider limit guarantees a dollar cost. Grok uses an advisory answer-length preference and does not send a token budget. Its registry sets ordinary reasoning to medium and simple retrieval to low. High reasoning requires explicit user intent or a clearly demanding task; it never selects a more expensive model. `policy.guaranteed_cost_ceiling` is always false. X Search uses at most two assistant/tool turns by default; turns do not bound posts, users or individual tool calls. Use provider dashboard limits as well. The gateway allows one concurrent inference, and each call makes one generation request. It has no daily quota ledger or deduplication across separate client calls; callers must not automatically retry timeouts or uncertain outcomes.
+Five modes are `general`, `design`, `review`, `x_research`, `rewrite`. `depth` (`brief`, `standard`, `deep`) controls requested answer detail. For Anthropic, depth defaults to effort `low`, `medium`, and `high`, respectively; a supplied supported `reasoning_effort` overrides that mapping. Anthropic sends `thinking: {type: "adaptive"}` and `output_config.effort`; it does not send legacy `budget_tokens`. xAI retains its own reasoning defaults and explicit override behavior rather than sharing Anthropic's depth mapping.
+
+The public `max_output_tokens` remains for compatibility and is returned internally as `answer_target_tokens`. Its provider semantics differ: Anthropic asks for approximately that much visible answer text while sending `max_tokens: 128000` as a final generation safety ceiling; xAI includes it only as an answer-length preference in the prompt; OpenRouter continues to send it as the provider's hard `max_tokens` limit. The OpenRouter path remains non-streaming in this change. The registry's existing `output_limit_policy` controls whether a requested target is limited by the local registry; `policy.provider_output_policy` and `policy.provider_generation_ceiling` describe the provider behavior. These values are not dollar ceilings. Anthropic's 128,000-token maximum is not an expected usage amount; billing remains based on actual generated tokens. `policy.guaranteed_cost_ceiling` is always false.
+
+Anthropic Messages and xAI Responses calls aggregate provider streams into the existing final MCP result; the tool does not expose token-by-token output. The direct-provider transport has a 30-second connection/header timeout, a 5-minute idle/no-event timeout reset by keepalives and meaningful reasoning, text, search or tool events, and an absolute limit of 10 minutes for brief/standard calls or 30 minutes for deep and X-research calls. The local stdio relay and smoke client allow 31 minutes so they do not cut off the gateway's 30-minute maximum. OpenRouter remains synchronous with its existing 90-second timeout; its policy metadata labels this `openrouter_sync_90s`, separate from the direct-provider timeout profiles.
+
+There is no automatic retry for provider errors, timeouts, interrupted streams or uncertain outcomes. An Anthropic `max_tokens` stop with no visible text returns `OUTPUT_BUDGET_EXHAUSTED` and keeps normalized usage; a partial visible answer returns successfully with `OUTPUT_TRUNCATED`. Errors distinguish connection, idle and absolute timeouts, plus `STREAM_INTERRUPTED` after provider acceptance. Messages explain that processing or billing may already have occurred. Clients must not retry such outcomes automatically.
 
 ## Privacy, image handling and normalized output
 
@@ -112,7 +121,7 @@ This authenticates to `/assets`, returns an opaque `asset_id`, and stores the de
 
 For Chat file inputs, `_meta["openai/fileParams"]` advertises top-level `image_files`. Each item declares all four supported properties and requires only `download_url` and `file_id`. OpenAI file IDs are never treated as Anthropic file IDs. Download origins default to **none** in `.local/settings.json`. After an authorized real attachment flow identifies the origin, the owner may add its exact HTTPS origin. Downloads reject userinfo, private/reserved IPs, invalid MIME/decoding and all redirects. DNS is validated at socket connection time, avoiding a second unvalidated resolution. No raw paths, arbitrary network URLs or signed URLs are logged.
 
-Results contain request ID, logical agent, actual backend/model, text response, structured source metadata, normalized usage, applied policy (including effective trust tier and serving-provider allowlist), image evidence, warnings and typed error. Missing usage is null; missing individual metrics are null, not zero. Cost is `provider_reported` or `unknown`; the gateway does not fabricate estimates. Provider payloads, internal chain-of-thought and raw error bodies are not exposed. Logs allow only request ID, alias/backend/model, mode, timing, numeric usage/cost and result class. Prompt, response body, key, images and signed URLs are not logged by default. Host, tunnel and provider logging policies are separate.
+Results contain request ID, logical agent, actual backend/model, text response, structured source metadata, normalized usage, safe diagnostics, applied policy (including the answer target, provider generation ceiling, effort and timeout profile), image evidence, warnings and typed error. Safe Anthropic diagnostics include returned model, stop reason, content-block type counts, visible-text block/character counts, thinking-block count/presence, input/output/reasoning tokens and cache usage. xAI diagnostics include final status, incomplete reason/code, text/reasoning usage, completed X Search/tool counts and elapsed time; timeout errors identify the timeout layer. Missing usage is null; missing individual metrics are null, not zero. Cost is `provider_reported` or `unknown`; the gateway does not fabricate estimates. Provider payloads, internal chain-of-thought and raw error bodies are not exposed. Thinking deltas are discarded and are never returned or logged. Logs allow only request ID, alias/backend/model, mode, timing, normalized usage, safe diagnostics and result class. Prompt, response body, key, images and signed URLs are not logged by default. Host, tunnel and provider logging policies are separate.
 
 ## Development checks and paid smoke plan
 
@@ -128,23 +137,26 @@ After explicit paid-use approval, configure keys, enable the paid gate and start
 
 ```powershell
 npm run smoke -- claude-text --allow-paid
+npm run smoke -- claude-opus-text --allow-paid
 npm run upload -- 'C:\path\to\synthetic-fixture.png'
 npm run smoke -- claude-image RETURNED_ASSET_ID --allow-paid
 npm run smoke -- grok-x --allow-paid
 npm run smoke -- openrouter --allow-paid
 ```
 
-Before running, review the registry models and current provider prices. The script prints the test, selected model, output preference and call count; `--allow-paid` is an additional explicit gate, not a price estimate. Use a harmless image with content not stated in its filename or prompt; manually compare the answer with the image. These four tests have independent results. No premium model, deep search or retry is included. Successful local HTTP and mocks do not prove provider access or product integration.
+Before running, review the registry models and current provider prices. The script prints the test, selected model, output preference and call count; `--allow-paid` is an additional explicit gate, not a price estimate. Use a harmless image with content not stated in its filename or prompt; manually compare the answer with the image. Each test is an independent paid request. `claude-opus-text` explicitly selects the premium profile and is an optional, separate call. No test automatically escalates to Opus, performs deep search or retries. Successful local HTTP and mocks do not prove provider access or product integration.
 
 ## Sources and scope decisions
 
 The user's current request supersedes the attached `01_REQUIREMENTS.md` wherever they conflict: new independent plugin, a single shared tool, and OpenRouter agents are included. The attachment's three-tool/Claude-only architecture, modifications inside Portable Agent Skills, extra stage schemas and daily quota ledger are not adopted. Compatible ideas such as authenticated HTTP, file-parameter handling and explicit image failures are retained.
 
-Official references checked on 2026-09-29:
+Official references checked on 2026-09-29 and 2026-09-30:
 
 - [OpenAI plugin packaging](https://developers.openai.com/plugins/build/plugins) and [file inputs](https://developers.openai.com/plugins/reference).
 - [Agent Plugins MCP format and client-managed authentication](https://agent-plugins.org/plugin-authors/mcp-servers).
 - [Codex MCP client configuration](https://learn.chatgpt.com/docs/extend/mcp?surface=cli).
-- [Anthropic model IDs](https://platform.claude.com/docs/en/models/overview) and [vision](https://platform.claude.com/docs/en/build-with-claude/vision).
+- [Anthropic current model IDs](https://docs.anthropic.com/en/docs/about-claude/model-deprecations) and [vision](https://platform.claude.com/docs/en/build-with-claude/vision).
+- [Anthropic adaptive thinking](https://platform.claude.com/docs/en/build-with-claude/adaptive-thinking), [effort](https://platform.claude.com/docs/en/build-with-claude/effort) and [Messages streaming](https://platform.claude.com/docs/en/build-with-claude/streaming).
+- [xAI Responses streaming](https://docs.x.ai/developers/tools/streaming-and-sync) and [X Search usage/citations](https://docs.x.ai/developers/tools/x-search).
 - [xAI reasoning effort](https://docs.x.ai/developers/model-capabilities/text/reasoning), [X Search](https://docs.x.ai/developers/tools/x-search), [citations](https://docs.x.ai/developers/tools/citations), [usage details](https://docs.x.ai/developers/tools/tool-usage-details).
 - [OpenRouter provider privacy routing](https://openrouter.ai/docs/guides/routing/provider-selection) and [public model catalog](https://openrouter.ai/api/v1/models).

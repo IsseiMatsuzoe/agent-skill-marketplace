@@ -15,7 +15,8 @@ function connection() {
 async function request(config, path, body, type) {
   const response = await fetch(new URL(path, config.url), {
     method: 'POST', headers: { Authorization: `Bearer ${config.token}`, 'Content-Type': type, Accept: 'application/json, text/event-stream' },
-    body, redirect: 'error', signal: AbortSignal.timeout(115000),
+    // Leave room for the gateway's 30-minute X Search/deep absolute timeout.
+    body, redirect: 'error', signal: AbortSignal.timeout(31 * 60 * 1000),
   });
   if (!response.ok) { await response.body?.cancel(); throw new Error('Gateway rejected request'); }
   if (response.status === 202 || response.status === 204) { await response.body?.cancel(); return null; }
