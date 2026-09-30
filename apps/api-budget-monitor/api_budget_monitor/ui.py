@@ -2,9 +2,10 @@ from __future__ import annotations
 
 from datetime import datetime
 from pathlib import Path
+from time import monotonic
 
-from PySide6.QtCore import QObject, QRunnable, Qt, QThreadPool, QTimer, Signal, Slot
-from PySide6.QtGui import QAction, QColor, QCursor, QDesktopServices, QIcon, QPainter, QPen, QPixmap
+from PySide6.QtCore import QEvent, QObject, QRunnable, Qt, QThreadPool, QTimer, Signal, Slot
+from PySide6.QtGui import QAction, QColor, QCursor, QDesktopServices, QIcon, QPainter, QPen, QPixmap, QShortcut
 from PySide6.QtWidgets import (
     QApplication,
     QDialog,
@@ -205,9 +206,14 @@ class SettingsDialog(QDialog):
 class BudgetPopup(QWidget):
     request_refresh = Signal()
     request_settings = Signal()
+    deactivated = Signal()
 
     def __init__(self):
         super().__init__(None, Qt.Tool | Qt.FramelessWindowHint | Qt.WindowStaysOnTopHint)
+        self._activation_seen = False
+        self._opening = False
+        self._escape = QShortcut(Qt.Key_Escape, self)
+        self._escape.activated.connect(self.hide)
         self.setAttribute(Qt.WA_TranslucentBackground, False)
         self.setStyleSheet(APP_STYLE)
         self.setWindowTitle("API Budget")
@@ -261,13 +267,28 @@ class BudgetPopup(QWidget):
         x = max(available.left(), x)
         y = max(available.top(), y)
         self.move(x, y)
-        self.show()
-        self.raise_()
-        self.activateWindow()
+        # Raising a Windows tool window can transiently deactivate it before
+        # activateWindow() completes. Treat this synchronous sequence as one open.
+        self._opening = True
+        try:
+            self.show()
+            self.raise_()
+            self.activateWindow()
+        finally:
+            self._opening = False
 
-    def focusOutEvent(self, event) -> None:  # noqa: N802
-        self.hide()
-        super().focusOutEvent(event)
+    def event(self, event) -> bool:
+        if event.type() == QEvent.WindowActivate and self.isVisible():
+            self._activation_seen = True
+        elif (event.type() == QEvent.WindowDeactivate and self.isVisible()
+              and self._activation_seen and not self._opening):
+            self.deactivated.emit()
+            self.hide()
+        return super().event(event)
+
+    def hideEvent(self, event) -> None:  # noqa: N802
+        self._activation_seen = False
+        super().hideEvent(event)
 
 
 def make_tray_icon() -> QIcon:
@@ -293,8 +314,10 @@ class BudgetMonitorApp(QObject):
         self.config, self.secrets = ensure_config(config_dir)
         self.pool = QThreadPool.globalInstance()
         self.popup = BudgetPopup()
+        self._tray_dismissed_at: float | None = None
         self.popup.request_refresh.connect(self.refresh)
         self.popup.request_settings.connect(self.open_settings)
+        self.popup.deactivated.connect(self._popup_deactivated)
 
         self.tray = QSystemTrayIcon(make_tray_icon(), self.qt_app)
         self.tray.setToolTip("API Budget")
@@ -329,10 +352,20 @@ class BudgetMonitorApp(QObject):
         self.timer.start(max(1, self.config.refresh_minutes) * 60 * 1000)
 
     def _tray_activated(self, reason: QSystemTrayIcon.ActivationReason) -> None:
+        dismissed_at = self._tray_dismissed_at
+        self._tray_dismissed_at = None
         if reason == QSystemTrayIcon.Trigger:
+            # Windows may deactivate on press, then deliver Trigger on release.
+            # Consume that click, but never suppress a later click indefinitely.
+            if dismissed_at is not None and monotonic() - dismissed_at <= self.qt_app.doubleClickInterval() / 1000:
+                return
             self.toggle_popup()
 
+    def _popup_deactivated(self) -> None:
+        self._tray_dismissed_at = monotonic() if self.tray.geometry().contains(QCursor.pos()) else None
+
     def toggle_popup(self) -> None:
+        self._tray_dismissed_at = None
         if self.popup.isVisible():
             self.popup.hide()
         else:
@@ -352,8 +385,13 @@ class BudgetMonitorApp(QObject):
         self.tray.showMessage("API Budget refresh failed", message, QSystemTrayIcon.Warning, 5000)
 
     def open_settings(self) -> None:
-        dialog = SettingsDialog(self.config, self.config_path, self.popup)
-        if dialog.exec() == QDialog.Accepted:
-            self.config = dialog.config
-            self._reset_timer()
-            self.refresh()
+        self._tray_dismissed_at = None
+        self.popup.hide()
+        dialog = SettingsDialog(self.config, self.config_path)
+        try:
+            if dialog.exec() == QDialog.Accepted:
+                self.config = dialog.config
+                self._reset_timer()
+                self.refresh()
+        finally:
+            dialog.deleteLater()
