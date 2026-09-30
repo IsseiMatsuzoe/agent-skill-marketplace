@@ -97,7 +97,7 @@ function emptyDiagnostics(provider, fields = {}) {
   };
 }
 
-function normalizedProviderError(backend, payload, diagnostics) {
+function normalizedProviderError(backend, payload, diagnostics, observedUsage = {}) {
   const detail = payload?.error ?? payload?.response?.error ?? payload;
   const kind = `${detail?.type ?? ''} ${detail?.code ?? ''}`.toLowerCase();
   const code = /auth|api.?key|permission|unauthorized|forbidden/.test(kind) ? 'AUTH_FAILED'
@@ -111,13 +111,21 @@ function normalizedProviderError(backend, payload, diagnostics) {
           : 'Provider reported an explicit streaming error; no retry was made.';
   const error = new GatewayError(code, message);
   error.diagnostics = diagnostics;
-  if (detail?.usage) error.usage = usage(detail.usage);
+  const rawUsage = {};
+  mergeUsage(rawUsage, observedUsage);
+  if (detail?.usage && typeof detail.usage === 'object') mergeUsage(rawUsage, detail.usage);
+  if (Object.keys(rawUsage).length) error.usage = usage(rawUsage);
   throw error;
 }
 
 function mergeUsage(target, next) {
   if (!next || typeof next !== 'object') return target;
-  for (const [key, value] of Object.entries(next)) if (value !== undefined && value !== null) target[key] = value;
+  for (const [key, value] of Object.entries(next)) {
+    if (value === undefined || value === null) continue;
+    target[key] = value && typeof value === 'object' && !Array.isArray(value)
+      ? { ...(target[key] ?? {}), ...value }
+      : value;
+  }
   return target;
 }
 
@@ -190,10 +198,12 @@ function anthropicStream() {
       elapsed_ms: elapsedMs,
     });
   };
-  const failStream = payload => normalizedProviderError('anthropic', payload, diagnostic(null));
+  const normalizedUsage = () => Object.keys(usageRaw).length ? usage(usageRaw) : null;
+  const failStream = payload => normalizedProviderError('anthropic', payload, diagnostic(null), usageRaw);
   return {
     get terminal() { return terminal; },
     diagnostics: diagnostic,
+    usage: normalizedUsage,
     onEvent(eventName, payload) {
       const type = payload?.type ?? eventName;
       if (type === 'ping' || eventName === 'ping') return false;
@@ -302,10 +312,12 @@ function xaiStream() {
       incomplete_reason: incompleteDetails.reason, incomplete_detail_code: incompleteDetails.code, elapsed_ms: elapsedMs,
     });
   };
-  const failStream = payload => normalizedProviderError('xai', payload, diagnostic(null));
+  const normalizedUsage = () => Object.keys(usageRaw).length ? usage(usageRaw) : null;
+  const failStream = payload => normalizedProviderError('xai', payload, diagnostic(null), usageRaw);
   return {
     get terminal() { return terminal; },
     diagnostics: diagnostic,
+    usage: normalizedUsage,
     onEvent(eventName, payload) {
       const type = payload?.type ?? eventName;
       if (type === 'ping' || eventName === 'ping') return false;
@@ -443,16 +455,23 @@ async function postStream(backend, key, body, fetchImpl, options = {}) {
   } catch (error) {
     if (error instanceof GatewayError) {
       if (!error.diagnostics) error.diagnostics = accumulator.diagnostics(now() - started);
+      if (!error.usage) error.usage = accumulator.usage();
       throw error;
     }
-    if (layer) throw timeoutError(backend, layer, now() - started, accumulator.diagnostics(now() - started));
+    if (layer) {
+      const timedOut = timeoutError(backend, layer, now() - started, accumulator.diagnostics(now() - started));
+      timedOut.usage = accumulator.usage();
+      throw timedOut;
+    }
     if (accepted) {
       const interrupted = new GatewayError('STREAM_INTERRUPTED', 'Provider accepted the request but the stream was interrupted. Processing or billing may already have occurred. No automatic retry was made.');
       interrupted.diagnostics = accumulator.diagnostics(now() - started);
+      interrupted.usage = accumulator.usage();
       throw interrupted;
     }
     const unknown = new GatewayError('OUTCOME_UNKNOWN', 'The connection failed after request dispatch; provider processing or billing may already have occurred. No automatic retry was made.');
     unknown.diagnostics = accumulator.diagnostics(now() - started);
+    unknown.usage = accumulator.usage();
     throw unknown;
   } finally {
     if (connectionTimer !== undefined) cancel(connectionTimer);

@@ -105,6 +105,8 @@ Anthropic Messages and xAI Responses calls aggregate provider streams into the e
 
 There is no automatic retry for provider errors, timeouts, interrupted streams or uncertain outcomes. An Anthropic `max_tokens` stop with no visible text returns `OUTPUT_BUDGET_EXHAUSTED` and keeps normalized usage; a partial visible answer returns successfully with `OUTPUT_TRUNCATED`. Errors distinguish connection, idle and absolute timeouts, plus `STREAM_INTERRUPTED` after provider acceptance. Messages explain that processing or billing may already have occurred. Clients must not retry such outcomes automatically.
 
+If a stream fails after reporting usage, the error result preserves those normalized partial usage values. Unreported token fields remain null and cost remains unknown; the gateway does not estimate missing final usage or cost.
+
 ## Privacy, image handling and normalized output
 
 Every OpenRouter request injects its registry-selected `provider.only` allowlist, `provider.data_collection="deny"`, `allow_fallbacks=false`, and `require_parameters=true`. Enforcement is silent and centralized; callers cannot override provider fields. The optional `zdr` registry profile additionally injects `provider.zdr=true`. A named request for Kimi, Qwen or DeepSeek never changes those conditions. Privacy/availability errors terminate the request. Strict model mismatch checking also rejects unexpected models (Anthropic dated snapshots of the configured family are accepted).

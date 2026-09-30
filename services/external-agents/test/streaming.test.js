@@ -30,12 +30,12 @@ function manualTimers() {
   };
 }
 
-function gatewayFor(fetchImpl, timeoutConfig) {
+function gatewayFor(fetchImpl, timeoutConfig, timers) {
   const calls = []; const logs = [];
   const transport = (backend, key, body, _fetch, options) => postJson(backend, key, body, (url, init) => {
     calls.push({ backend, url, init, body: JSON.parse(init.body) });
     return fetchImpl(url, init);
-  }, { ...options, ...(timeoutConfig ? { timeoutConfig } : {}) });
+  }, { ...options, ...(timeoutConfig ? { timeoutConfig } : {}), ...(timers ? { timers, now: timers.now } : {}) });
   const gateway = createGateway({ registry, env, adapters: createAdapters(transport), log: value => logs.push(value) });
   return { gateway, calls, logs };
 }
@@ -94,10 +94,12 @@ test('Anthropic max_tokens with partial visible text succeeds and warns OUTPUT_T
 
 test('Anthropic explicit stream error is normalized immediately with no retry', async () => {
   const { gateway, calls, logs } = gatewayFor(async () => streamResponse([
+    anthropicStart('claude-sonnet-5-5', { input_tokens: 31 }),
     frame('error', { error: { type: 'rate_limit_error', message: 'PRIVATE_PROVIDER_ERROR_BODY' } }),
   ]));
   const result = await gateway({ agent: 'claude', task: 'error regression' });
   assert.equal(result.error.code, 'RATE_LIMITED'); assert.equal(calls.length, 1);
+  assert.equal(result.usage.input_tokens, 31);
   assert.ok(!JSON.stringify([result, logs]).includes('PRIVATE_PROVIDER_ERROR_BODY'));
 });
 
@@ -112,7 +114,38 @@ test('accepted Anthropic stream interruption has uncertain outcome semantics and
   });
   const result = await gateway({ agent: 'claude', task: 'interrupt regression' });
   assert.equal(result.error.code, 'STREAM_INTERRUPTED'); assert.match(result.error.message, /billing may already have occurred/i);
+  assert.equal(result.usage.input_tokens, 17);
   assert.equal(sends, 1); assert.equal(calls.length, 1);
+});
+
+test('accepted xAI stream interruption returns only usage observed before disconnect', async () => {
+  let sends = 0; let reads = 0;
+  const { gateway, calls } = gatewayFor(async () => {
+    sends++;
+    return new Response(new ReadableStream({ pull(controller) {
+      if (reads++ === 0) controller.enqueue(new TextEncoder().encode(frame('response.created', { response: {
+        model: 'grok-4.7', status: 'in_progress', usage: { input_tokens: 13 },
+      } })));
+      else controller.error(new Error('PRIVATE_TRANSPORT_DETAIL'));
+    } }));
+  });
+  const result = await gateway({ agent: 'grok', task: 'interrupted usage regression' });
+  assert.equal(result.error.code, 'STREAM_INTERRUPTED');
+  assert.match(result.error.message, /billing may already have occurred/i);
+  assert.equal(result.usage.input_tokens, 13); assert.equal(result.usage.output_tokens, null);
+  assert.equal(result.usage.cost.basis, 'unknown');
+  assert.equal(sends, 1); assert.equal(calls.length, 1);
+});
+
+test('outcome-unknown transport failure does not invent usage or cost', async () => {
+  let sends = 0;
+  const result = await postJson('xai', 'fake', { stream: true }, async () => {
+    sends++;
+    throw new Error('PRIVATE_TRANSPORT_DETAIL');
+  }).then(value => ({ value }), error => ({ error }));
+  assert.equal(result.error.code, 'OUTCOME_UNKNOWN');
+  assert.equal(result.error.usage, null);
+  assert.equal(sends, 1);
 });
 
 test('idle timeout resets for ping, reasoning, text and X Search progress events', async () => {
@@ -142,14 +175,21 @@ test('idle timeout resets for ping, reasoning, text and X Search progress events
 });
 
 test('idle timeout fires on configured inactivity without a real wait', async () => {
-  const timers = manualTimers(); const bodyStream = new ReadableStream({ start() {} });
-  const pending = postJson('anthropic', 'fake', { stream: true }, async () => new Response(bodyStream), {
-    timers, now: timers.now, timeoutProfile: 'ordinary_10m',
-    timeoutConfig: { connectionMs: 40, idleMs: 12, ordinaryMs: 200, extendedMs: 300 },
-  }).then(value => ({ value }), error => ({ error }));
+  const timers = manualTimers();
+  const bodyStream = new ReadableStream({ start(controller) {
+    controller.enqueue(new TextEncoder().encode([
+      anthropicStart('claude-sonnet-5-5', { input_tokens: 19, cache_read_input_tokens: 3 }),
+      frame('message_delta', { delta: { stop_reason: null }, usage: { output_tokens: 5 } }),
+    ].join('')));
+  } });
+  const { gateway } = gatewayFor(async () => new Response(bodyStream),
+    { connectionMs: 40, idleMs: 12, ordinaryMs: 200, extendedMs: 300 }, timers);
+  const pending = gateway({ agent: 'claude', task: 'idle usage regression' });
   await flush(); timers.advance(12);
   const result = await pending;
-  assert.equal(result.error.code, 'IDLE_TIMEOUT'); assert.equal(result.error.diagnostics.timeout_layer, 'idle');
+  assert.equal(result.error.code, 'IDLE_TIMEOUT'); assert.equal(result.diagnostics.timeout_layer, 'idle');
+  assert.equal(result.usage.input_tokens, 19); assert.equal(result.usage.output_tokens, 5);
+  assert.equal(result.usage.cache_read_tokens, 3); assert.equal(result.usage.cost.basis, 'unknown');
 });
 
 test('connection/header timeout is distinct and fires before response acceptance', async () => {
@@ -170,7 +210,11 @@ test('absolute timeout uses 10 minute ordinary and 30 minute deep/X-research pro
   assert.equal(timeoutProfileFor({ mode: 'x_research', depth: 'brief' }), 'extended_30m');
   assert.deepEqual(DEFAULT_TIMEOUTS, { connectionMs: 30000, idleMs: 300000, ordinaryMs: 600000, extendedMs: 1800000 });
   for (const [profile, duration] of [['ordinary_10m', 30], ['extended_30m', 60]]) {
-    const timers = manualTimers(); const bodyStream = new ReadableStream({ start() {} });
+    const timers = manualTimers(); const bodyStream = new ReadableStream({ start(controller) {
+      controller.enqueue(new TextEncoder().encode(frame('response.created', { response: {
+        model: 'grok-4.7', status: 'in_progress', usage: { input_tokens: 23 },
+      } })));
+    } });
     const pending = postJson('xai', 'fake', { stream: true }, async () => new Response(bodyStream), {
       timers, now: timers.now, timeoutProfile: profile,
       timeoutConfig: { connectionMs: 5, idleMs: 100, ordinaryMs: 30, extendedMs: 60 },
@@ -179,6 +223,7 @@ test('absolute timeout uses 10 minute ordinary and 30 minute deep/X-research pro
     timers.advance(1);
     const result = await pending;
     assert.equal(result.error.code, 'ABSOLUTE_TIMEOUT'); assert.equal(result.error.diagnostics.timeout_layer, 'absolute');
+    assert.equal(result.error.usage.input_tokens, 23);
   }
 });
 
@@ -261,10 +306,14 @@ test('xAI final diagnostics only retain a safe returned model identifier', async
 
 test('xAI explicit provider stream failure is normalized immediately with no retry', async () => {
   const { gateway, calls, logs } = gatewayFor(async () => streamResponse([
-    frame('response.failed', { response: { status: 'failed', error: { type: 'server_error', message: 'PRIVATE_PROVIDER_ERROR_BODY' } } }),
+    frame('response.created', { response: { model: 'grok-4.7', status: 'in_progress', usage: { input_tokens: 23 } } }),
+    frame('response.failed', { response: { status: 'failed', error: {
+      type: 'server_error', message: 'PRIVATE_PROVIDER_ERROR_BODY', usage: { output_tokens: 4 },
+    } } }),
   ]));
   const result = await gateway({ agent: 'grok', task: 'provider failure' });
   assert.equal(result.error.code, 'PROVIDER_ERROR'); assert.equal(calls.length, 1);
+  assert.equal(result.usage.input_tokens, 23); assert.equal(result.usage.output_tokens, 4);
   assert.ok(!JSON.stringify([result, logs]).includes('PRIVATE_PROVIDER_ERROR_BODY'));
 });
 
