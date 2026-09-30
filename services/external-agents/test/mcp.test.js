@@ -16,7 +16,7 @@ test('real MCP HTTP initialize/list/call/output/error and authenticated upload, 
   const gateway = createGateway({ registry, images, env: { ANTHROPIC_API_KEY: 'fake', EXTERNAL_AGENTS_ENABLE_PAID: 'true' }, log: () => {}, adapters: createAdapters(async (_, __, body) => {
     calls++; lastBody = body; return { model: body.model, content: [{ type: 'text', text: 'MCP verified' }] };
   }) });
-  const server = createHttpServer({ token, images, call: gateway, port: 0 });
+  const server = createHttpServer({ token, images, call: gateway, port: 0, paidCallsEnabled: true });
   await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
   const base = `http://127.0.0.1:${server.address().port}`;
   const client = new Client({ name: 'local-test', version: '1' });
@@ -24,6 +24,9 @@ test('real MCP HTTP initialize/list/call/output/error and authenticated upload, 
     assert.equal((await fetch(`${base}/mcp`, { method: 'POST', body: '{}' })).status, 401);
     assert.equal((await fetch(`${base}/assets`, { method: 'POST', headers: { Authorization: 'Bearer wrong' }, body: 'image' })).status, 401);
     assert.equal((await fetch(`${base}/health`, { headers: { Authorization: `Bearer ${token}`, Origin: 'https://evil.example' } })).status, 403);
+    const health = await fetch(`${base}/health`, { headers: { Authorization: `Bearer ${token}` } });
+    assert.equal(health.status, 200);
+    assert.deepEqual(await health.json(), { status: 'ready', inference_verified: false, paid_calls_enabled: true });
     assert.equal(calls, 0);
     await client.connect(new StreamableHTTPClientTransport(new URL(`${base}/mcp`), { requestInit: { headers: { Authorization: `Bearer ${token}` } } }));
     const { tools } = await client.listTools(); assert.equal(tools.length, 1); assert.equal(tools[0].name, 'call_external_agent');

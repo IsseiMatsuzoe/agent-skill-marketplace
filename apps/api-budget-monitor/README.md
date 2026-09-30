@@ -1,8 +1,8 @@
 # API Budget Monitor
 
-A small Windows system-tray companion for the **External Agents** project. It is deliberately **not** part of the ChatGPT plugin package: `plugins/external-agents/` stays thin, while this app only observes provider billing/key state on the local PC.
+A small Windows system-tray companion for the **External Agents** project. It is deliberately **not** part of the ChatGPT plugin package: `plugins/external-agents/` stays thin, while this app observes provider budget state and manages the local backend and Secure MCP Tunnel processes.
 
-## MVP behavior
+## Budget behavior
 
 Each provider card answers one question: **how much usable credit remains relative to my own monthly reference budget?**
 
@@ -11,7 +11,7 @@ Each provider card answers one question: **how much usable credit remains relati
 - Balances above the reference are valid: `$15 / $10` displays `150%`; the bar stays full and an overflow badge shows `+50%`.
 - Missing/unsupported balance data displays `Unavailable`, never `$0`.
 - Under the gauge the app shows `Key active`, `Key invalid`, `Key not configured`, or `Key status unknown`, plus a configured/native expiry date when available.
-- No history, forecasting, charts, or spend analytics in the MVP.
+- No history, forecasting, charts, or spend analytics.
 
 ## Provider data sources
 
@@ -55,7 +55,29 @@ On first start, the app creates local files under `%LOCALAPPDATA%\ApiBudgetMonit
 - `settings.json` — reference budgets, optional manual Claude balance, rotation/expiry metadata.
 - `secrets.env` — API and management credentials. **Never commit this file.**
 
-The tray icon opens the compact budget popup. Right-click it to refresh, open Settings, or open the local config folder.
+The tray icon opens the compact runtime and budget popup. Right-click it to refresh, open Settings, or open the local config folder.
+
+## External Agents runtime
+
+After the one-time setup below, Windows login can start the monitor, backend, and tunnel through the existing API Budget startup shortcut:
+
+1. Run `install.ps1 -EnableStartup` from this folder.
+2. In **Settings**, enable **Start External Agents with API Budget**. The service folder is discovered from the repository layout by default; set an override only if the checkout moves.
+3. Select **Set up tunnel auth** in the popup and enter the Secure MCP Tunnel runtime key. It is saved to the current Windows user's Credential Manager. It is never written to `settings.json`, a repository file, a process argument, or a log.
+
+When enabled, the monitor checks the authenticated backend `/health` endpoint, starts the backend if needed, waits up to 45 seconds for readiness, then starts the configured `tunnel-client` profile. A running but unverified tunnel is shown as an error; process existence alone never means **Connected**. Missing tunnel credentials leave the backend available and show **Needs authentication/configuration**. The runtime card also shows the backend's read-only paid-call gate state.
+
+Start and Restart run asynchronously. Restart stops only detached worker processes whose PID, executable, and creation time match the monitor's owner record. Those workers own their child process groups, so the runtime continues if the tray UI exits. Logs are kept under `%LOCALAPPDATA%\ApiBudgetMonitor\runtime`, with a 1 MB file and two rotated backups per component. **Open External Agents folder** opens the service's `.local` configuration directory when it exists.
+
+For manual recovery, start the backend from `services/external-agents` with `npm start`. The existing tunnel profile can be started in a separate PowerShell window with the secure local prompt below; the key is not passed as a command-line argument:
+
+```powershell
+$tunnelSecret = Read-Host 'Tunnel runtime key (local input only)' -AsSecureString
+$env:CONTROL_PLANE_API_KEY = [System.Net.NetworkCredential]::new('', $tunnelSecret).Password
+& .local/tunnel-client/tunnel-client.exe run --profile external-agents
+```
+
+The monitor does not create a second Windows startup entry. Windows startup remains controlled by the existing `install.ps1 -EnableStartup` shortcut.
 
 ## Local configuration
 
@@ -103,7 +125,7 @@ Management credentials remain local to this app and are not sent to the External
 
 ## Tests
 
-The unit tests do not call paid/provider APIs:
+The unit tests do not call paid/provider APIs or model inference:
 
 ```powershell
 python -m unittest discover -s tests -v

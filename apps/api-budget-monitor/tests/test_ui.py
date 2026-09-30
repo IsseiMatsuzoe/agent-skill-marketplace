@@ -28,6 +28,7 @@ class FlyoutTests(unittest.TestCase):
         with patch("api_budget_monitor.ui.QTimer.singleShot"):
             self.monitor = BudgetMonitorApp(self.app, Path(self.directory.name))
         self.monitor.timer.stop()
+        self.monitor.runtime_timer.stop()
         self.popup = self.monitor.popup
         self.monitor.tray.hide()
 
@@ -61,7 +62,8 @@ class FlyoutTests(unittest.TestCase):
 
     def test_internal_click_focus_changes_and_mouse_move_keep_open(self):
         self.open_popup()
-        refresh, settings = self.popup.findChildren(QPushButton)
+        buttons = {button.text(): button for button in self.popup.findChildren(QPushButton)}
+        refresh, settings = buttons["Refresh"], buttons["Settings"]
         with patch.object(self.monitor.pool, "start") as start:
             QTest.mouseClick(refresh, Qt.LeftButton)
             self.assertEqual(start.call_count, 1)
@@ -167,6 +169,14 @@ class FlyoutTests(unittest.TestCase):
         self.assertEqual(self.popup.cards["openrouter"].percent_label.text(), "150%")
         self.assertEqual(self.popup.cards["openrouter"].gauge.value(), 100)
         self.assertEqual(self.popup.styleSheet(), APP_STYLE)
+
+    def test_runtime_card_displays_read_only_gate_state(self):
+        from api_budget_monitor.runtime import RuntimeSnapshot
+
+        self.monitor._runtime_done(RuntimeSnapshot("Running", "Connected", False))
+        self.assertEqual(self.popup.runtime_card.backend_label.text(), "Running")
+        self.assertEqual(self.popup.runtime_card.tunnel_label.text(), "Connected")
+        self.assertEqual(self.popup.runtime_card.paid_label.text(), "Disabled")
 
 
 if __name__ == "__main__":
