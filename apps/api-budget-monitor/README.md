@@ -67,14 +67,22 @@ After the one-time setup below, Windows login can start the monitor, backend, an
 
 When enabled, the monitor checks the authenticated backend `/health` endpoint, starts the backend if needed, waits up to 45 seconds for readiness, then starts the configured `tunnel-client` profile. A running but unverified tunnel is shown as an error; process existence alone never means **Connected**. Missing tunnel credentials leave the backend available and show **Needs authentication/configuration**. The runtime card also shows the backend's read-only paid-call gate state.
 
+Profile discovery follows the installed client's behavior: `TUNNEL_CLIENT_PROFILE_DIR`, then `XDG_CONFIG_HOME/tunnel-client`, then `HOME/.config/tunnel-client` when `HOME` is set. On Windows without those overrides, it uses `%APPDATA%\tunnel-client\external-agents.yaml`. These rules were checked against Windows tunnel-client 0.0.15; its help text only describes the Unix default. The monitor passes the resolved file using `--profile-file`, avoiding a named-profile `statat ... too many levels of symbolic links` failure observed on this Windows machine. It does not copy or create another profile.
+
+If startup stops at **Needs authentication/configuration** without a `tunnel.log`, verify backend readiness first, then the client executable, resolved profile file, Credential Manager target `ApiBudgetMonitor/ExternalAgentsTunnel`, and the profile's loopback health address. The tunnel worker is created only after those checks pass. Runtime auto-start is disabled by default; use **Start runtime** or enable the startup setting. A running monitor must be restarted after updating its Python source.
+
 Start and Restart run asynchronously. Restart stops only detached worker processes whose PID, executable, and creation time match the monitor's owner record. Those workers own their child process groups, so the runtime continues if the tray UI exits. Logs are kept under `%LOCALAPPDATA%\ApiBudgetMonitor\runtime`, with a 1 MB file and two rotated backups per component. **Open External Agents folder** opens the service's `.local` configuration directory when it exists.
 
-For manual recovery, start the backend from `services/external-agents` with `npm start`. The existing tunnel profile can be started in a separate PowerShell window with the secure local prompt below; the key is not passed as a command-line argument:
+The tunnel worker passes an empty `--log.file` to stream client output into its bounded log. With the tested Windows client, the literal value `stdout` creates a file named `stdout` in the service directory instead.
+
+For manual recovery, start the backend from `services/external-agents` with `npm start`. For the default Windows profile without directory overrides, start the tunnel in a separate PowerShell window with the secure local prompt below; the key is not passed as a command-line argument. With a directory override, use the resolved profile file described above:
 
 ```powershell
 $tunnelSecret = Read-Host 'Tunnel runtime key (local input only)' -AsSecureString
 $env:CONTROL_PLANE_API_KEY = [System.Net.NetworkCredential]::new('', $tunnelSecret).Password
-& .local/tunnel-client/tunnel-client.exe run --profile external-agents
+$tunnelProfileFile = Join-Path $env:APPDATA 'tunnel-client\external-agents.yaml'
+& .local/tunnel-client/tunnel-client.exe doctor --profile-file $tunnelProfileFile --explain
+& .local/tunnel-client/tunnel-client.exe run --profile-file $tunnelProfileFile
 ```
 
 The monitor does not create a second Windows startup entry. Windows startup remains controlled by the existing `install.ps1 -EnableStartup` shortcut.
