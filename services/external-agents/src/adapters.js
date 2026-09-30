@@ -243,15 +243,26 @@ function incompleteDetails(value) {
 }
 
 function xaiStream() {
-  const textChunks = []; const citations = []; const completedSearchIds = new Set(); const toolCounts = {};
+  const textChunks = []; const citations = []; const observedSearchIds = new Set(); const completedSearchIds = new Set(); const toolCounts = {};
   const outputTextFallback = []; const usageRaw = {}; const contentCounts = {}; const reasoningIndexes = new Set();
   let model = null; let status = null; let incomplete = { reason: null, code: null }; let terminal = false;
-  let visibleChars = 0; let visibleTextBlocks = 0; let anonymousSearches = 0; let reasoningEvents = 0;
+  let visibleChars = 0; let visibleTextBlocks = 0; let anonymousSearches = 0; let reasoningEvents = 0; let terminalUsageSearchCalls = null;
   const countTool = type => { const key = type === 'x_search_call' ? 'x_search' : type === 'web_search_call' ? 'web_search' : 'other'; toolCounts[key] = (toolCounts[key] ?? 0) + 1; };
-  const countSearch = item => {
-    if (item?.type !== 'x_search_call') return;
-    if (item.id) completedSearchIds.add(item.id); else anonymousSearches++;
-    countTool('x_search_call');
+  const searchKey = (item, outputIndex) => typeof item?.id === 'string' && item.id ? `id:${item.id}`
+    : Number.isInteger(outputIndex) && outputIndex >= 0 ? `index:${outputIndex}` : null;
+  const observeSearch = (item, outputIndex) => {
+    if (item?.type !== 'x_search_call') return null;
+    const key = searchKey(item, outputIndex);
+    if (key && !observedSearchIds.has(key)) {
+      observedSearchIds.add(key);
+      countTool('x_search_call');
+    }
+    return key;
+  };
+  const countSearch = (item, outputIndex) => {
+    if (item?.type !== 'x_search_call' || item.status !== 'completed') return;
+    const key = observeSearch(item, outputIndex);
+    if (key) completedSearchIds.add(key); else anonymousSearches++;
   };
   const getResponse = payload => payload?.response && typeof payload.response === 'object' ? payload.response : payload;
   const addOutput = response => {
@@ -259,8 +270,11 @@ function xaiStream() {
     if (typeof response.status === 'string') status = label(response.status);
     if (response.usage) mergeUsage(usageRaw, response.usage);
     if (response.incomplete_details) incomplete = incompleteDetails(response.incomplete_details);
-    for (const item of response.output ?? []) {
-      if (item?.type === 'x_search_call' && item.status === 'completed') countSearch(item);
+    for (const [index, item] of (response.output ?? []).entries()) {
+      if (item?.type === 'x_search_call') {
+        observeSearch(item, index);
+        if (item.status === 'completed') countSearch(item, index);
+      }
       if (item?.type === 'web_search_call') countTool('web_search_call');
       if (item?.type !== 'message') continue;
       let fallbackBlockCount = 0;
@@ -283,7 +297,7 @@ function xaiStream() {
       thinking_block_count: reasoningIndexes.size || (reasoningEvents ? 1 : 0), thinking_block_present: reasoningEvents > 0,
       input_tokens: normalizedUsage?.input_tokens ?? null, output_tokens: normalizedUsage?.output_tokens ?? null,
       text_tokens: normalizedUsage?.text_tokens ?? null, reasoning_tokens: normalizedUsage?.reasoning_tokens ?? null,
-      x_search_calls_completed: Math.max(completedSearchIds.size + anonymousSearches, normalizedUsage?.x_search_calls ?? 0),
+      x_search_calls_completed: Math.max(completedSearchIds.size + anonymousSearches, terminalUsageSearchCalls ?? 0),
       tool_event_counts: { ...toolCounts }, status: status ?? null,
       incomplete_reason: incompleteDetails.reason, incomplete_detail_code: incompleteDetails.code, elapsed_ms: elapsedMs,
     });
@@ -301,8 +315,8 @@ function xaiStream() {
         const item = payload.item ?? payload.output_item ?? {};
         if (item.type === 'message' && type === 'response.output_item.added') visibleTextBlocks++;
         if (item.type === 'x_search_call') {
-          countTool('x_search_call');
-          if (item.status === 'completed' || type === 'response.output_item.done') countSearch(item);
+          observeSearch(item, payload.output_index);
+          if (item.status === 'completed') countSearch(item, payload.output_index);
         } else if (item.type === 'web_search_call') countTool('web_search_call');
       }
       if (type === 'response.output_text.delta' && typeof payload.delta === 'string') {
@@ -323,13 +337,19 @@ function xaiStream() {
       }
       if (type === 'response.x_search_call.completed') {
         const item = payload.item ?? payload;
-        if (item.id) completedSearchIds.add(item.id); else anonymousSearches++;
-        countTool('x_search_call');
+        const outputIndex = payload.output_index ?? item.output_index;
+        observeSearch(item, outputIndex);
+        if (item.status === 'completed') countSearch(item, outputIndex);
       }
       if (type === 'response.completed' || type === 'response.incomplete') {
         const response = getResponse(payload);
         addOutput(response);
         if (response.status === 'failed') failStream(payload);
+        const terminalUsage = response.usage ? usage(response.usage) : null;
+        terminalUsageSearchCalls = terminalUsage
+          ? Math.max(terminalUsage.x_search_calls ?? 0,
+            (terminalUsage.x_posts_fetched ?? 0) > 0 || (terminalUsage.x_users_fetched ?? 0) > 0 ? 1 : 0)
+          : null;
         if (type === 'response.incomplete' && !status) status = 'incomplete';
         terminal = true;
       }
@@ -340,9 +360,8 @@ function xaiStream() {
       if (!textChunks.length) visibleChars = text.length;
       if (!visibleTextBlocks && text) visibleTextBlocks = 1;
       const normalizedUsage = Object.keys(usageRaw).length ? usage(usageRaw) : null;
-      const reportedSearches = normalizedUsage?.x_search_calls ?? 0;
       const searchCompleted = completedSearchIds.size + anonymousSearches;
-      const completed = Math.max(searchCompleted, reportedSearches);
+      const completed = Math.max(searchCompleted, terminalUsageSearchCalls ?? 0);
       const output = [];
       for (let i = 0; i < searchCompleted; i++) output.push({ type: 'x_search_call', status: 'completed' });
       if (text || visibleTextBlocks) output.push({ type: 'message', content: [{ type: 'output_text', text, annotations: citations }] });
@@ -350,7 +369,7 @@ function xaiStream() {
         model, status: status ?? 'completed', incomplete_details: incomplete,
         output, citations, usage: usageRaw,
         diagnostics: emptyDiagnostics('xai', {
-          returned_model: model, content_block_counts: contentCounts,
+          returned_model: safeModel('xai', model), content_block_counts: contentCounts,
           visible_text_blocks: visibleTextBlocks, visible_text_characters: visibleChars,
           thinking_block_count: reasoningIndexes.size || (reasoningEvents ? 1 : 0), thinking_block_present: reasoningEvents > 0,
           input_tokens: normalizedUsage?.input_tokens ?? null, output_tokens: normalizedUsage?.output_tokens ?? null,
@@ -537,8 +556,10 @@ export function createAdapters(post = postJson) {
         text_tokens: normalizedUsage?.text_tokens ?? null, reasoning_tokens: normalizedUsage?.reasoning_tokens ?? null,
         x_search_calls_completed: output.filter(o => o.type === 'x_search_call' && o.status === 'completed').length,
       });
-      const searched = output.some(o => o.type === 'x_search_call' && o.status === 'completed') ||
-        (normalizedUsage?.x_posts_fetched ?? 0) > 0 || (normalizedUsage?.x_users_fetched ?? 0) > 0 || (normalizedUsage?.x_search_calls ?? 0) > 0;
+      const searched = data.diagnostics
+        ? data.diagnostics.x_search_calls_completed > 0
+        : output.some(o => o.type === 'x_search_call' && o.status === 'completed') ||
+          (normalizedUsage?.x_posts_fetched ?? 0) > 0 || (normalizedUsage?.x_users_fetched ?? 0) > 0 || (normalizedUsage?.x_search_calls ?? 0) > 0;
       if (input.mode === 'x_research' && !searched) {
         const error = new GatewayError('SEARCH_UNVERIFIED', 'Native X Search was requested but execution was not confirmed in the response.');
         error.usage = normalizedUsage; error.diagnostics = diagnostics;

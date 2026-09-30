@@ -191,6 +191,8 @@ test('xAI X Search streaming verifies native search and normalizes citations, us
   ], usage: { input_tokens: 25, output_tokens: 19, output_tokens_details: { reasoning_tokens: 12, text_tokens: 7 }, server_side_tool_usage_details: { x_search_calls: 1, x_posts_fetched: 4, x_users_fetched: 2 } } };
   const { gateway, calls } = gatewayFor(async () => streamResponse([
     frame('response.created', { response: { model: 'grok-4.7', status: 'in_progress' } }),
+    frame('response.output_item.added', { output_index: 0, item: { id: 'x-1', type: 'x_search_call', status: 'in_progress' } }),
+    frame('response.output_item.done', { output_index: 0, item: { id: 'x-1', type: 'x_search_call', status: 'completed' } }),
     frame('response.output_text.delta', { delta: 'Report [[1]]' }),
     frame('response.completed', { response }),
   ]));
@@ -204,7 +206,57 @@ test('xAI X Search streaming verifies native search and normalizes citations, us
   assert.equal(result.usage.x_search_calls, 1); assert.equal(result.usage.x_posts_fetched, 4); assert.equal(result.usage.x_users_fetched, 2);
   assert.equal(result.usage.reasoning_tokens, 12); assert.equal(result.usage.text_tokens, 7);
   assert.equal(result.diagnostics.status, 'completed'); assert.equal(result.diagnostics.x_search_calls_completed, 1);
+  assert.equal(result.diagnostics.tool_event_counts.x_search, 1);
   assert.equal(result.policy.timeout_profile, 'extended_30m'); assert.equal(result.policy.provider_generation_ceiling, null);
+});
+
+test('xAI failed X Search output_item.done is not accepted as search success', async () => {
+  const { gateway, calls } = gatewayFor(async () => streamResponse([
+    frame('response.created', { response: { model: 'grok-4.7', status: 'in_progress' } }),
+    frame('response.output_item.added', { output_index: 0, item: { id: 'x-failed', type: 'x_search_call', status: 'in_progress' } }),
+    frame('response.output_item.done', { output_index: 0, item: { id: 'x-failed', type: 'x_search_call', status: 'failed' } }),
+    frame('response.output_text.delta', { delta: 'Generated without verified search' }),
+    frame('response.completed', { response: {
+      model: 'grok-4.7', status: 'completed',
+      output: [
+        { id: 'x-failed', type: 'x_search_call', status: 'failed' },
+        { type: 'message', content: [{ type: 'output_text', text: 'Generated without verified search' }] },
+      ],
+      usage: { input_tokens: 10, output_tokens: 6, server_side_tool_usage_details: { x_search_calls: 0, x_posts_fetched: 0, x_users_fetched: 0 } },
+    } }),
+  ]));
+  const result = await gateway({ agent: 'grok', task: 'verify recent discussion', mode: 'x_research' });
+  assert.equal(result.error.code, 'SEARCH_UNVERIFIED');
+  assert.equal(result.diagnostics.x_search_calls_completed, 0);
+  assert.equal(result.diagnostics.tool_event_counts.x_search, 1);
+  assert.equal(calls.length, 1);
+});
+
+test('xAI terminal search usage confirms X Search without an output item', async () => {
+  const { gateway } = gatewayFor(async () => streamResponse([
+    frame('response.created', { response: { model: 'grok-4.7', status: 'in_progress' } }),
+    frame('response.output_text.delta', { delta: 'Terminal usage confirms the search' }),
+    frame('response.completed', { response: {
+      model: 'grok-4.7', status: 'completed',
+      output: [{ type: 'message', content: [{ type: 'output_text', text: 'Terminal usage confirms the search' }] }],
+      usage: { input_tokens: 10, output_tokens: 6, server_side_tool_usage_details: { x_posts_fetched: 2 } },
+    } }),
+  ]));
+  const result = await gateway({ agent: 'grok', task: 'verify recent discussion', mode: 'x_research' });
+  assert.equal(result.ok, true);
+  assert.equal(result.diagnostics.x_search_calls_completed, 1);
+  assert.equal(result.usage.x_posts_fetched, 2);
+});
+
+test('xAI final diagnostics only retain a safe returned model identifier', async () => {
+  const result = await postJson('xai', 'fake', { stream: true }, async () => streamResponse([
+    frame('response.created', { response: { model: 'grok-4.7', status: 'in_progress' } }),
+    frame('response.completed', { response: {
+      model: 'grok-4.7\nPRIVATE_MODEL_METADATA', status: 'completed', output: [],
+    } }),
+  ]));
+  assert.equal(result.model, 'grok-4.7\nPRIVATE_MODEL_METADATA');
+  assert.equal(result.diagnostics.returned_model, null);
 });
 
 test('xAI explicit provider stream failure is normalized immediately with no retry', async () => {

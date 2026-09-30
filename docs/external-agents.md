@@ -109,7 +109,7 @@ There is no automatic retry for provider errors, timeouts, interrupted streams o
 
 Every OpenRouter request injects its registry-selected `provider.only` allowlist, `provider.data_collection="deny"`, `allow_fallbacks=false`, and `require_parameters=true`. Enforcement is silent and centralized; callers cannot override provider fields. The optional `zdr` registry profile additionally injects `provider.zdr=true`. A named request for Kimi, Qwen or DeepSeek never changes those conditions. Privacy/availability errors terminate the request. Strict model mismatch checking also rejects unexpected models (Anthropic dated snapshots of the configured family are accepted).
 
-Direct provider retention is governed by your provider account terms; `direct` does not claim ZDR. xAI requests use `store:false`. Claude gets no execution or repository tools. X content is treated as reports, not authoritative specifications. Native search must be confirmed by completed search output or successful usage metadata; generation alone is not reported as a search.
+Direct provider retention is governed by your provider account terms; `direct` does not claim ZDR. xAI requests use `store:false`. Claude gets no execution or repository tools. X content is treated as reports, not authoritative specifications. Native search is confirmed only by an output item with `status: "completed"` or successful terminal usage metadata; a generic item-done event or generated text alone is not reported as a search.
 
 For local image review:
 
