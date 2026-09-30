@@ -36,14 +36,16 @@ export async function readBody(req, limit) {
   }
   return Buffer.concat(chunks);
 }
-export function createHttpServer({ token, call, images, port = 47831 }) {
+export function createHttpServer({ token, call, images, port = 47831, paidCallsEnabled = false }) {
   if (typeof token !== 'string' || token.length < 32) throw new GatewayError('CONFIG_REQUIRED', 'Run setup to create the local MCP token.');
   const server = createServer(async (req, res) => {
     try {
       const allowedHosts = [`127.0.0.1:${server.address()?.port ?? port}`, `localhost:${server.address()?.port ?? port}`];
       if (!allowedHosts.includes(req.headers.host) || req.headers.origin) return json(res, 403, { error: 'ORIGIN_REJECTED' });
       if (!authorized(req.headers.authorization, token)) return json(res, 401, { error: 'AUTH_REQUIRED' });
-      if (req.url === '/health' && req.method === 'GET') return json(res, 200, { status: 'ready', inference_verified: false });
+      if (req.url === '/health' && req.method === 'GET') return json(res, 200, {
+        status: 'ready', inference_verified: false, paid_calls_enabled: paidCallsEnabled === true,
+      });
       if (req.url === '/assets' && req.method === 'POST') {
         const asset = await images.upload(await readBody(req, MAX_IMAGE), req.headers['content-type']);
         return json(res, 201, asset);
@@ -70,7 +72,8 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
     const { registry, settings, env } = loadConfig();
     const images = new ImageStore({ origins: settings.file_download_origins });
     const call = createGateway({ registry, env, images });
-    const server = createHttpServer({ token: env.EXTERNAL_AGENTS_MCP_TOKEN, call, images, port: settings.port });
+    const server = createHttpServer({ token: env.EXTERNAL_AGENTS_MCP_TOKEN, call, images, port: settings.port,
+      paidCallsEnabled: env.EXTERNAL_AGENTS_ENABLE_PAID === 'true' });
     server.on('error', () => { console.error('SERVER_START_FAILED'); process.exitCode = 1; });
     server.listen(settings.port, '127.0.0.1', () => console.error(`External Agents listening on loopback port ${settings.port}; paid calls ${env.EXTERNAL_AGENTS_ENABLE_PAID === 'true' ? 'enabled' : 'disabled'}.`));
     for (const signal of ['SIGINT', 'SIGTERM']) process.on(signal, () => server.close(() => process.exit(0)));

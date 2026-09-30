@@ -29,9 +29,18 @@ DEFAULT_PROVIDERS = {
 
 
 @dataclass
+class ExternalAgentsRuntimeConfig:
+    enabled_on_startup: bool = False
+    service_path: str = ""
+    tunnel_profile: str = "external-agents"
+    tunnel_client_path: str = ""
+
+
+@dataclass
 class AppConfig:
     refresh_minutes: int = 10
     providers: dict[str, dict] = field(default_factory=lambda: json.loads(json.dumps(DEFAULT_PROVIDERS)))
+    external_agents: ExternalAgentsRuntimeConfig = field(default_factory=ExternalAgentsRuntimeConfig)
 
 
 def default_config_dir() -> Path:
@@ -68,13 +77,34 @@ def load_config(path: Path) -> AppConfig:
     providers = json.loads(json.dumps(DEFAULT_PROVIDERS))
     for provider_id, values in raw.get("providers", {}).items():
         providers.setdefault(provider_id, {}).update(values)
-    return AppConfig(refresh_minutes=int(raw.get("refresh_minutes", 10)), providers=providers)
+    runtime = raw.get("external_agents", {})
+    if not isinstance(runtime, dict):
+        runtime = {}
+    return AppConfig(
+        refresh_minutes=int(raw.get("refresh_minutes", 10)),
+        providers=providers,
+        external_agents=ExternalAgentsRuntimeConfig(
+            enabled_on_startup=runtime.get("enabled_on_startup") is True,
+            service_path=str(runtime.get("service_path") or ""),
+            tunnel_profile=str(runtime.get("tunnel_profile") or "external-agents"),
+            tunnel_client_path=str(runtime.get("tunnel_client_path") or ""),
+        ),
+    )
 
 
 def save_config(path: Path, config: AppConfig) -> None:
     path.write_text(
         json.dumps(
-            {"refresh_minutes": config.refresh_minutes, "providers": config.providers},
+            {
+                "refresh_minutes": config.refresh_minutes,
+                "providers": config.providers,
+                "external_agents": {
+                    "enabled_on_startup": config.external_agents.enabled_on_startup,
+                    "service_path": config.external_agents.service_path,
+                    "tunnel_profile": config.external_agents.tunnel_profile,
+                    "tunnel_client_path": config.external_agents.tunnel_client_path,
+                },
+            },
             indent=2,
             ensure_ascii=False,
         )

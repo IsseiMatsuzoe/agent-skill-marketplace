@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import datetime
+import os
 from pathlib import Path
 from time import monotonic
 
@@ -8,12 +9,15 @@ from PySide6.QtCore import QEvent, QObject, QRunnable, Qt, QThreadPool, QTimer, 
 from PySide6.QtGui import QAction, QColor, QCursor, QDesktopServices, QIcon, QPainter, QPen, QPixmap, QShortcut
 from PySide6.QtWidgets import (
     QApplication,
+    QCheckBox,
     QDialog,
     QDoubleSpinBox,
+    QFileDialog,
     QFormLayout,
     QFrame,
     QHBoxLayout,
     QLabel,
+    QMessageBox,
     QMenu,
     QPushButton,
     QLineEdit,
@@ -27,6 +31,15 @@ from PySide6.QtCore import QUrl
 from .config import AppConfig, ensure_config, save_config
 from .core import KeyState, ProviderSnapshot, compact_until, format_money, format_percent
 from .providers import fetch_all
+from .runtime import (
+    RuntimeManager,
+    RuntimeSnapshot,
+    PROFILE_NAME_RE,
+    runtime_transition_messages,
+    save_tunnel_credential,
+    service_path,
+    runtime_directory,
+)
 
 
 APP_STYLE = """
@@ -63,6 +76,28 @@ class RefreshWorker(QRunnable):
             self.signals.done.emit(fetch_all(self.providers_cfg, self.secrets))
         except Exception as exc:  # UI boundary: surface unexpected failures without crashing tray app.
             self.signals.failed.emit(str(exc))
+
+
+class RuntimeWorker(QRunnable):
+    def __init__(self, manager: RuntimeManager, action: str):
+        super().__init__()
+        self.manager = manager
+        self.action = action
+        self.signals = WorkerSignals()
+
+    @Slot()
+    def run(self) -> None:
+        try:
+            if self.action == "start":
+                result = self.manager.start()
+            elif self.action == "restart":
+                result = self.manager.restart()
+            else:
+                result = self.manager.snapshot()
+            self.signals.done.emit(result)
+        except Exception:
+            # Runtime paths and third-party process errors are deliberately not echoed into the UI.
+            self.signals.failed.emit("Runtime status is unavailable.")
 
 
 class ProviderCard(QFrame):
@@ -135,13 +170,75 @@ class ProviderCard(QFrame):
         self.status_label.setToolTip(snapshot.detail or "")
 
 
+class RuntimeCard(QFrame):
+    request_start = Signal()
+    request_restart = Signal()
+    request_open_logs = Signal()
+    request_open_external_agents = Signal()
+    request_setup_tunnel_auth = Signal()
+
+    def __init__(self):
+        super().__init__()
+        self.setObjectName("card")
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(14, 12, 14, 12)
+        layout.setSpacing(7)
+
+        title = QLabel("External Agents")
+        title.setObjectName("provider")
+        layout.addWidget(title)
+
+        form = QFormLayout()
+        self.backend_label = QLabel("Checking…")
+        self.tunnel_label = QLabel("Checking…")
+        self.paid_label = QLabel("Unknown")
+        for label in (self.backend_label, self.tunnel_label, self.paid_label):
+            label.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
+        form.addRow("Backend", self.backend_label)
+        form.addRow("Tunnel", self.tunnel_label)
+        form.addRow("Paid calls", self.paid_label)
+        layout.addLayout(form)
+
+        controls = QHBoxLayout()
+        self.start_button = QPushButton("Start runtime")
+        self.restart_button = QPushButton("Restart runtime")
+        self.start_button.clicked.connect(self.request_start)
+        self.restart_button.clicked.connect(self.request_restart)
+        controls.addWidget(self.start_button)
+        controls.addWidget(self.restart_button)
+        layout.addLayout(controls)
+
+        links = QHBoxLayout()
+        logs = QPushButton("Open logs")
+        folder = QPushButton("Open External Agents folder")
+        auth = QPushButton("Set up tunnel auth")
+        logs.clicked.connect(self.request_open_logs)
+        folder.clicked.connect(self.request_open_external_agents)
+        auth.clicked.connect(self.request_setup_tunnel_auth)
+        links.addWidget(logs)
+        links.addWidget(folder)
+        links.addWidget(auth)
+        layout.addLayout(links)
+
+    def set_snapshot(self, snapshot: RuntimeSnapshot) -> None:
+        self.backend_label.setText(snapshot.backend)
+        self.tunnel_label.setText(snapshot.tunnel)
+        self.paid_label.setText("Enabled" if snapshot.paid_calls_enabled is True else "Disabled" if snapshot.paid_calls_enabled is False else "Unknown")
+        self.backend_label.setToolTip(snapshot.backend_detail)
+        self.tunnel_label.setToolTip(snapshot.tunnel_detail)
+
+    def set_busy(self, busy: bool) -> None:
+        self.start_button.setEnabled(not busy)
+        self.restart_button.setEnabled(not busy)
+
+
 class SettingsDialog(QDialog):
     def __init__(self, config: AppConfig, config_path: Path, parent: QWidget | None = None):
         super().__init__(parent)
         self.config = config
         self.config_path = config_path
         self.setWindowTitle("API Budget settings")
-        self.setMinimumWidth(360)
+        self.setMinimumWidth(540)
         self.setStyleSheet(APP_STYLE)
 
         root = QVBoxLayout(self)
@@ -177,7 +274,44 @@ class SettingsDialog(QDialog):
         form.addRow("Claude manual balance", claude_manual)
 
         root.addLayout(form)
-        note = QLabel("Secrets and key rotation dates stay in the local config folder; keys are never displayed here.")
+
+        runtime_form = QFormLayout()
+        self.runtime_enabled = QCheckBox("Start External Agents with API Budget")
+        self.runtime_enabled.setChecked(config.external_agents.enabled_on_startup)
+        runtime_form.addRow("Automatic startup", self.runtime_enabled)
+
+        self.service_path_input = QLineEdit(config.external_agents.service_path)
+        self.service_path_input.setPlaceholderText("Automatic: repository services/external-agents")
+        service_row = QHBoxLayout()
+        service_row.addWidget(self.service_path_input, 1)
+        service_browse = QPushButton("Browse…")
+        service_browse.clicked.connect(self._browse_service)
+        service_row.addWidget(service_browse)
+        runtime_form.addRow("External Agents service", service_row)
+
+        self.tunnel_profile_input = QLineEdit(config.external_agents.tunnel_profile)
+        runtime_form.addRow("Tunnel profile", self.tunnel_profile_input)
+
+        self.tunnel_client_input = QLineEdit(config.external_agents.tunnel_client_path)
+        self.tunnel_client_input.setPlaceholderText("Automatic: service .local/tunnel-client/tunnel-client.exe")
+        client_row = QHBoxLayout()
+        client_row.addWidget(self.tunnel_client_input, 1)
+        client_browse = QPushButton("Browse…")
+        client_browse.clicked.connect(self._browse_tunnel_client)
+        client_row.addWidget(client_browse)
+        runtime_form.addRow("Tunnel client", client_row)
+
+        runtime_note = QLabel(
+            "Enable the existing API Budget startup shortcut with install.ps1 -EnableStartup. "
+            "The tunnel key is stored in Windows Credential Manager; it is never written to settings or logs."
+        )
+        runtime_note.setWordWrap(True)
+        runtime_note.setObjectName("muted")
+        runtime_form.addRow("", runtime_note)
+        root.addWidget(QLabel("External Agents runtime"))
+        root.addLayout(runtime_form)
+
+        note = QLabel("Provider keys and key rotation dates stay in the local config folder; keys are never displayed here.")
         note.setWordWrap(True)
         note.setObjectName("muted")
         root.addWidget(note)
@@ -193,19 +327,42 @@ class SettingsDialog(QDialog):
         root.addLayout(buttons)
 
     def _save(self) -> None:
+        profile = self.tunnel_profile_input.text().strip() or "external-agents"
+        if not PROFILE_NAME_RE.fullmatch(profile):
+            QMessageBox.warning(self, "Invalid tunnel profile", "Use 1–64 letters, numbers, hyphens, or underscores.")
+            return
         for provider_id, widget in self.budget_inputs.items():
             self.config.providers[provider_id]["reference_budget_usd"] = widget.value()
             until = self.until_inputs[provider_id].text().strip()
             self.config.providers[provider_id]["key_valid_until"] = until or None
         manual = self.manual_inputs["anthropic"].value()
         self.config.providers["anthropic"]["manual_remaining_usd"] = None if manual < 0 else manual
+        self.config.external_agents.enabled_on_startup = self.runtime_enabled.isChecked()
+        self.config.external_agents.service_path = self.service_path_input.text().strip()
+        self.config.external_agents.tunnel_profile = profile
+        self.config.external_agents.tunnel_client_path = self.tunnel_client_input.text().strip()
         save_config(self.config_path, self.config)
         self.accept()
+
+    def _browse_service(self) -> None:
+        path = QFileDialog.getExistingDirectory(self, "Select External Agents service folder", self.service_path_input.text())
+        if path:
+            self.service_path_input.setText(path)
+
+    def _browse_tunnel_client(self) -> None:
+        path, _ = QFileDialog.getOpenFileName(self, "Select tunnel-client executable", self.tunnel_client_input.text(), "Executable (*.exe);;All files (*)")
+        if path:
+            self.tunnel_client_input.setText(path)
 
 
 class BudgetPopup(QWidget):
     request_refresh = Signal()
     request_settings = Signal()
+    request_runtime_start = Signal()
+    request_runtime_restart = Signal()
+    request_open_logs = Signal()
+    request_open_external_agents = Signal()
+    request_setup_tunnel_auth = Signal()
     deactivated = Signal()
 
     def __init__(self):
@@ -232,6 +389,14 @@ class BudgetPopup(QWidget):
         header.addWidget(self.updated_label)
         root.addLayout(header)
 
+        self.runtime_card = RuntimeCard()
+        self.runtime_card.request_start.connect(self.request_runtime_start)
+        self.runtime_card.request_restart.connect(self.request_runtime_restart)
+        self.runtime_card.request_open_logs.connect(self.request_open_logs)
+        self.runtime_card.request_open_external_agents.connect(self.request_open_external_agents)
+        self.runtime_card.request_setup_tunnel_auth.connect(self.request_setup_tunnel_auth)
+        root.addWidget(self.runtime_card)
+
         self.cards: dict[str, ProviderCard] = {}
         for provider_id in ("anthropic", "xai", "openrouter"):
             card = ProviderCard()
@@ -256,6 +421,9 @@ class BudgetPopup(QWidget):
                 self.cards[snapshot.provider_id].update_snapshot(snapshot)
         self.updated_label.setText(datetime.now().strftime("Updated %H:%M"))
         self.adjustSize()
+
+    def set_runtime_snapshot(self, snapshot: RuntimeSnapshot) -> None:
+        self.runtime_card.set_snapshot(snapshot)
 
     def show_near_cursor(self) -> None:
         self.adjustSize()
@@ -312,11 +480,19 @@ class BudgetMonitorApp(QObject):
         self.config_dir = config_dir
         self.config_path = config_dir / "settings.json"
         self.config, self.secrets = ensure_config(config_dir)
+        self.runtime_manager = RuntimeManager(config_dir, self.config)
+        self._runtime_busy = False
+        self._runtime_snapshot: RuntimeSnapshot | None = None
         self.pool = QThreadPool.globalInstance()
         self.popup = BudgetPopup()
         self._tray_dismissed_at: float | None = None
         self.popup.request_refresh.connect(self.refresh)
         self.popup.request_settings.connect(self.open_settings)
+        self.popup.request_runtime_start.connect(lambda: self._run_runtime("start"))
+        self.popup.request_runtime_restart.connect(lambda: self._run_runtime("restart"))
+        self.popup.request_open_logs.connect(self.open_runtime_logs)
+        self.popup.request_open_external_agents.connect(self.open_external_agents_folder)
+        self.popup.request_setup_tunnel_auth.connect(self.setup_tunnel_auth)
         self.popup.deactivated.connect(self._popup_deactivated)
 
         self.tray = QSystemTrayIcon(make_tray_icon(), self.qt_app)
@@ -347,6 +523,15 @@ class BudgetMonitorApp(QObject):
         self.timer.timeout.connect(self.refresh)
         self._reset_timer()
         QTimer.singleShot(200, self.refresh)
+
+        self.runtime_timer = QTimer(self)
+        self.runtime_timer.setInterval(15_000)
+        self.runtime_timer.timeout.connect(self.poll_runtime)
+        self.runtime_timer.start()
+        if self.config.external_agents.enabled_on_startup:
+            QTimer.singleShot(250, lambda: self._run_runtime("start"))
+        else:
+            QTimer.singleShot(250, self.poll_runtime)
 
     def _reset_timer(self) -> None:
         self.timer.start(max(1, self.config.refresh_minutes) * 60 * 1000)
@@ -384,6 +569,89 @@ class BudgetMonitorApp(QObject):
     def _refresh_failed(self, message: str) -> None:
         self.tray.showMessage("API Budget refresh failed", message, QSystemTrayIcon.Warning, 5000)
 
+    def poll_runtime(self) -> None:
+        if not self._runtime_busy:
+            self._run_runtime("status")
+
+    def _run_runtime(self, action: str) -> None:
+        if self._runtime_busy:
+            return
+        self._runtime_busy = True
+        self.popup.runtime_card.set_busy(action in {"start", "restart"})
+        if action in {"start", "restart"}:
+            self.popup.set_runtime_snapshot(RuntimeSnapshot("Starting", self.popup.runtime_card.tunnel_label.text()))
+        worker = RuntimeWorker(self.runtime_manager, action)
+        worker.signals.done.connect(self._runtime_done)
+        worker.signals.failed.connect(self._runtime_failed)
+        self.pool.start(worker)
+
+    def _runtime_done(self, snapshot: RuntimeSnapshot) -> None:
+        self._runtime_busy = False
+        self.popup.runtime_card.set_busy(False)
+        for title, message in runtime_transition_messages(self._runtime_snapshot, snapshot):
+            self.tray.showMessage(title, message, QSystemTrayIcon.Information, 5000)
+        self._runtime_snapshot = snapshot
+        self.popup.set_runtime_snapshot(snapshot)
+
+    def _runtime_failed(self, message: str) -> None:
+        self._runtime_busy = False
+        self.popup.runtime_card.set_busy(False)
+        self.popup.runtime_card.backend_label.setText("Error / Unreachable")
+        self.popup.runtime_card.backend_label.setToolTip(message)
+
+    def open_runtime_logs(self) -> None:
+        path = runtime_directory(self.config_dir)
+        QDesktopServices.openUrl(QUrl.fromLocalFile(str(path)))
+
+    def open_external_agents_folder(self) -> None:
+        path = service_path(self.config) / ".local"
+        if not path.is_dir():
+            path = service_path(self.config)
+        QDesktopServices.openUrl(QUrl.fromLocalFile(str(path)))
+
+    def setup_tunnel_auth(self) -> None:
+        if os.name != "nt":
+            QMessageBox.information(self.popup, "Tunnel authentication", "Windows Credential Manager is available only on Windows.")
+            return
+        dialog = QDialog(self.popup)
+        dialog.setWindowTitle("Set up tunnel authentication")
+        dialog.setMinimumWidth(420)
+        dialog.setStyleSheet(APP_STYLE)
+        layout = QVBoxLayout(dialog)
+        note = QLabel("Enter the Secure MCP Tunnel runtime key. It will be saved to Windows Credential Manager and passed to tunnel-client only when it starts.")
+        note.setWordWrap(True)
+        field = QLineEdit()
+        field.setEchoMode(QLineEdit.Password)
+        field.setPlaceholderText("Tunnel runtime key")
+        layout.addWidget(note)
+        layout.addWidget(field)
+        buttons = QHBoxLayout()
+        buttons.addStretch(1)
+        cancel = QPushButton("Cancel")
+        save = QPushButton("Save securely")
+        cancel.clicked.connect(dialog.reject)
+        save.clicked.connect(dialog.accept)
+        buttons.addWidget(cancel)
+        buttons.addWidget(save)
+        layout.addLayout(buttons)
+        if dialog.exec() != QDialog.Accepted:
+            field.clear()
+            dialog.deleteLater()
+            return
+        try:
+            save_tunnel_credential(field.text())
+        except (ValueError, RuntimeError):
+            QMessageBox.warning(self.popup, "Tunnel authentication", "The credential could not be saved. Check the value and try again.")
+        else:
+            field.clear()
+            if self.config.external_agents.enabled_on_startup:
+                self._run_runtime("start")
+            else:
+                self.poll_runtime()
+        finally:
+            field.clear()
+            dialog.deleteLater()
+
     def open_settings(self) -> None:
         self._tray_dismissed_at = None
         self.popup.hide()
@@ -391,7 +659,9 @@ class BudgetMonitorApp(QObject):
         try:
             if dialog.exec() == QDialog.Accepted:
                 self.config = dialog.config
+                self.runtime_manager.config = self.config
                 self._reset_timer()
                 self.refresh()
+                self.poll_runtime()
         finally:
             dialog.deleteLater()
