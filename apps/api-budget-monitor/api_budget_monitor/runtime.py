@@ -75,9 +75,9 @@ def tunnel_profile_path(profile: str) -> Path:
         directory = Path(os.environ["TUNNEL_CLIENT_PROFILE_DIR"])
     elif os.getenv("XDG_CONFIG_HOME"):
         directory = Path(os.environ["XDG_CONFIG_HOME"]) / "tunnel-client"
-    elif os.name == "nt" and os.getenv("APPDATA"):
-        directory = Path(os.environ["APPDATA"]) / "tunnel-client"
     else:
+        # Match tunnel-client's native profile lookup on every platform:
+        # TUNNEL_CLIENT_PROFILE_DIR -> XDG_CONFIG_HOME -> ~/.config/tunnel-client.
         directory = Path.home() / ".config" / "tunnel-client"
     return directory / f"{profile}.yaml"
 
