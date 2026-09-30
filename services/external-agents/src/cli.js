@@ -56,6 +56,7 @@ try {
     if (env.EXTERNAL_AGENTS_ENABLE_PAID !== 'true') throw new Error();
     const cases = {
       'claude-text': { agent: 'claude', task: 'Reply with one short greeting.', max_output_tokens: 256 },
+      'claude-opus-text': { agent: 'claude-opus', task: 'Reply with one short greeting.', max_output_tokens: 256, user_requested_agent: true },
       'claude-image': { agent: 'claude', task: 'Describe only the visible shapes and their relative positions.', mode: 'review', visual_review: true, asset_ids: [process.argv[4]], max_output_tokens: 512 },
       'grok-x': { agent: 'grok', task: 'Find one recent public developer discussion about API integration. Cite the source and separate reports from verified facts.', mode: 'x_research', max_output_tokens: 512 },
       'openrouter': { agent: 'gemini', task: 'Reply with one short greeting.', max_output_tokens: 256 },
@@ -65,7 +66,7 @@ try {
     const client = new Client({ name: 'external-agents-smoke', version: '0.1.0' });
     try {
       await client.connect(new StreamableHTTPClientTransport(new URL(`http://127.0.0.1:${settings.port}/mcp`), { requestInit: { headers: { Authorization: `Bearer ${env.EXTERNAL_AGENTS_MCP_TOKEN}` } } }));
-      const response = await client.callTool({ name: 'call_external_agent', arguments: input }, undefined, { timeout: 115000 });
+      const response = await client.callTool({ name: 'call_external_agent', arguments: input }, undefined, { timeout: 31 * 60 * 1000 });
       console.log(JSON.stringify(response.structuredContent, null, 2));
       if (response.isError) process.exitCode = 1;
     } finally { await client.close(); }

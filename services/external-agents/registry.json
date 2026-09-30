@@ -20,6 +20,24 @@
       "premium": false
     },
     {
+      "alias": "claude-opus",
+      "backend": "anthropic",
+      "model": "claude-opus-5-5",
+      "capabilities": [
+        "general",
+        "design",
+        "review",
+        "rewrite",
+        "image"
+      ],
+      "privacy_profile": "direct",
+      "default_depth": "standard",
+      "default_max_output_tokens": 2048,
+      "max_output_tokens": 8192,
+      "enabled": true,
+      "premium": true
+    },
+    {
       "alias": "grok",
       "backend": "xai",
       "model": "grok-4.7",

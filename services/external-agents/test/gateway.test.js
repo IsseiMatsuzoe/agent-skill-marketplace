@@ -32,6 +32,8 @@ test('every enabled alias routes through its registry backend and normalizes out
   for (const agent of registry.agents.filter(a => a.enabled)) {
     const result = await gateway({ agent: agent.alias, task: 'Hello', user_requested_agent: true });
     assert.equal(result.ok, true); assert.equal(result.backend, agent.backend); assert.equal(result.model, agent.model);
+    assert.equal(result.policy.provider_output_policy, agent.backend === 'anthropic' ? 'answer_target' : agent.backend === 'xai' ? 'prompt_preference' : 'hard_provider_limit');
+    assert.equal(result.policy.timeout_profile, agent.backend === 'openrouter' ? 'openrouter_sync_90s' : 'ordinary_10m');
     assert.equal(calls.at(-1).backend, agent.backend); assert.equal(calls.at(-1).body.model, agent.model);
     assert.ok(resultSchema.safeParse(result).success); assert.ok(result.response.length > 0);
   }
@@ -83,22 +85,31 @@ test('privacy-incompatible endpoint returns policy/availability error once', asy
   assert.equal(result.error.code, 'POLICY_OR_MODEL_UNAVAILABLE'); assert.equal(attempts, 1);
   assert.ok(!JSON.stringify([result, logs]).includes('secret-o'));
 });
-test('Claude accepts its explicit output ceiling without changing other routes', async () => {
+test('Claude answer target is separate from its provider generation ceiling', async () => {
   const { gateway, calls } = setup();
   assert.equal((await gateway({ agent: 'claude', task: 'hard', depth: 'deep' })).ok, true);
-  assert.equal(calls[0].body.model, registry.agents[0].model); assert.equal(calls[0].body.max_tokens, 2048);
+  assert.equal(calls[0].body.model, registry.agents[0].model); assert.equal(calls[0].body.max_tokens, 128000);
+  assert.deepEqual(calls[0].body.thinking, { type: 'adaptive' }); assert.deepEqual(calls[0].body.output_config, { effort: 'high' });
+  assert.equal(calls[0].body.stream, true); assert.equal(calls[0].body.messages[0].content.at(-1).text.includes('Approximate visible-answer target: 2048 tokens'), true);
   for (const limit of [4097, 8192]) {
     const result = await gateway({ agent: 'claude', task: 'x', max_output_tokens: limit });
     assert.equal(result.ok, true); assert.equal(result.backend, 'anthropic');
     assert.equal(result.policy.max_output_tokens, limit);
-    assert.equal(calls.at(-1).backend, 'anthropic'); assert.equal(calls.at(-1).body.max_tokens, limit);
+    assert.equal(result.policy.answer_target_tokens, limit); assert.equal(result.policy.provider_generation_ceiling, 128000);
+    assert.equal(result.policy.provider_output_policy, 'answer_target');
+    assert.equal(calls.at(-1).backend, 'anthropic'); assert.equal(calls.at(-1).body.max_tokens, 128000);
+    assert.deepEqual(calls.at(-1).body.output_config, { effort: 'medium' });
   }
+  assert.equal((await gateway({ agent: 'claude', task: 'brief', depth: 'brief' })).ok, true);
+  assert.deepEqual(calls.at(-1).body.output_config, { effort: 'low' });
+  assert.equal((await gateway({ agent: 'claude', task: 'override', depth: 'deep', reasoning_effort: 'low' })).ok, true);
+  assert.deepEqual(calls.at(-1).body.output_config, { effort: 'low' });
   assert.equal((await gateway({ agent: 'claude', task: 'x', max_output_tokens: 8193 })).error.code, 'INVALID_INPUT');
   assert.equal((await gateway({ agent: 'gemini', task: 'x', max_output_tokens: 4097 })).error.code, 'BUDGET_BLOCKED');
-  assert.equal(calls.length, 3);
+  assert.equal(calls.length, 5);
 });
-test('registry rejects unsafe privacy, duplicates and capabilities', () => {
-  for (const mutate of [r => r.agents.push(r.agents[0]), r => r.agents[2].privacy_profile = 'direct', r => r.agents[0].privacy_profile = 'deny_collection', r => r.agents[0].max_output_tokens = 64, r => r.agents[2].capabilities.push('image')]) {
+test('registry rejects unsafe privacy, duplicates, capabilities and automatic Opus profiles', () => {
+  for (const mutate of [r => r.agents.push(r.agents[0]), r => r.agents[3].privacy_profile = 'direct', r => r.agents[0].privacy_profile = 'deny_collection', r => r.agents[0].max_output_tokens = 64, r => r.agents[2].capabilities.push('image'), r => r.agents[1].premium = false]) {
     const bad = structuredClone(registry); mutate(bad); assert.throws(() => validateRegistry(bad));
   }
 });

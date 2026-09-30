@@ -27,10 +27,21 @@ export const inputSchema = z.object({
 }).strict();
 
 export const usageSchema = z.object({
-  input_tokens: count, output_tokens: count, reasoning_tokens: count,
+  input_tokens: count, output_tokens: count, text_tokens: count.optional(), reasoning_tokens: count,
   cache_read_tokens: count, cache_write_tokens: count,
   x_posts_fetched: count, x_users_fetched: count, x_search_calls: count,
   cost: z.object({ amount: count, currency: z.literal('USD'), basis: z.enum(['provider_reported', 'unknown']) }),
+}).strict();
+export const diagnosticsSchema = z.object({
+  provider: z.enum(['anthropic', 'xai', 'openrouter']), returned_model: z.string().max(200).nullable(),
+  stop_reason: z.string().max(128).nullable(), content_block_counts: z.record(z.string().max(128), z.number().int().nonnegative()),
+  visible_text_blocks: z.number().int().nonnegative(), visible_text_characters: z.number().int().nonnegative(),
+  thinking_block_count: z.number().int().nonnegative(), thinking_block_present: z.boolean(),
+  input_tokens: count, output_tokens: count, text_tokens: count, reasoning_tokens: count,
+  cache_read_tokens: count, cache_write_tokens: count,
+  status: z.string().max(128).nullable(), incomplete_reason: z.string().max(128).nullable(), incomplete_detail_code: z.string().max(128).nullable(),
+  x_search_calls_completed: z.number().int().nonnegative(), tool_event_counts: z.record(z.string().max(128), z.number().int().nonnegative()),
+  elapsed_ms: count, timeout_layer: z.enum(['connection', 'idle', 'absolute']).nullable(),
 }).strict();
 export const resultSchema = z.object({
   request_id: z.string().uuid(), ok: z.boolean(), agent: z.string().nullable(),
@@ -38,7 +49,8 @@ export const resultSchema = z.object({
   response: z.string().nullable(),
   sources: z.array(z.object({ url: z.string(), title: z.string().nullable(), handle: z.string().nullable(), timestamp: z.string().nullable(), provenance: z.literal('provider_citation'), handle_provenance: z.enum(['provider', 'derived_from_url']).nullable() }).strict()),
   usage: usageSchema.nullable(),
-  policy: z.object({ selection: z.enum(['auto_allowed', 'explicit_only']), provider_only: z.array(z.string()).nullable(), privacy: z.string(), data_collection: z.literal('deny').nullable(), zdr: z.boolean(), cross_model_fallback: z.literal(false), depth: z.enum(depths), max_output_tokens: z.number(), output_limit_policy: z.enum(['request_limit', 'advisory']), guaranteed_cost_ceiling: z.literal(false), reasoning_effort: z.enum(['low', 'medium', 'high']).nullable(), x_search_max_turns: z.number().nullable() }).strict().nullable(),
+  diagnostics: diagnosticsSchema.nullable().optional(),
+  policy: z.object({ selection: z.enum(['auto_allowed', 'explicit_only']), provider_only: z.array(z.string()).nullable(), privacy: z.string(), data_collection: z.literal('deny').nullable(), zdr: z.boolean(), cross_model_fallback: z.literal(false), depth: z.enum(depths), max_output_tokens: z.number(), answer_target_tokens: z.number().optional(), provider_generation_ceiling: z.number().nullable().optional(), provider_output_policy: z.enum(['answer_target', 'prompt_preference', 'hard_provider_limit']).optional(), output_limit_policy: z.enum(['request_limit', 'advisory']), guaranteed_cost_ceiling: z.literal(false), reasoning_effort: z.enum(['low', 'medium', 'high']).nullable(), timeout_profile: z.enum(['ordinary_10m', 'extended_30m', 'openrouter_sync_90s']).optional(), x_search_max_turns: z.number().nullable() }).strict().nullable(),
   images_sent: z.array(z.object({ id: z.string(), sha256: z.string(), width: z.number(), height: z.number(), mime_type: z.string() }).strict()),
   warnings: z.array(z.string()),
   error: z.object({ code: z.string(), message: z.string(), retryable: z.literal(false) }).strict().nullable(),
@@ -77,6 +89,9 @@ export function validateRegistry(raw) {
     if (aliases.has(a.alias) || (a.enabled && !a.model.trim()) || a.default_max_output_tokens > a.max_output_tokens)
       fail('CONFIG_REQUIRED', 'Invalid registry alias or token limits.');
     aliases.add(a.alias);
+    if ((a.alias === 'claude-opus' && (a.backend !== 'anthropic' || !a.premium || !a.model.startsWith('claude-opus-'))) ||
+        (a.backend === 'anthropic' && /^claude-opus-/i.test(a.model) && !a.premium))
+      fail('CONFIG_REQUIRED', 'Claude Opus profiles must be Anthropic and premium/explicit-only.');
     if ((a.backend === 'openrouter') === (a.privacy_profile === 'direct'))
       fail('CONFIG_REQUIRED', 'Privacy profile is incompatible with the backend.');
     if (a.capabilities.includes('image') && a.backend !== 'anthropic')
