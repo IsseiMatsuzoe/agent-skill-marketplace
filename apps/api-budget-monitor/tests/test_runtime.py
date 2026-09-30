@@ -18,10 +18,21 @@ from api_budget_monitor.runtime import (
     _tunnel_probe,
     _worker_command,
     runtime_transition_messages,
+    tunnel_profile_path,
 )
 
 
 class RuntimeConfigTests(unittest.TestCase):
+    def test_default_tunnel_profile_path_matches_tunnel_client_on_windows(self):
+        with tempfile.TemporaryDirectory() as appdata:
+            with patch.dict(os.environ, {
+                "APPDATA": appdata,
+                "TUNNEL_CLIENT_PROFILE_DIR": "",
+                "XDG_CONFIG_HOME": "",
+            }, clear=False), patch("api_budget_monitor.runtime.os.name", "nt"):
+                expected = Path.home() / ".config" / "tunnel-client" / "external-agents.yaml"
+                self.assertEqual(tunnel_profile_path("external-agents"), expected)
+
     def test_runtime_settings_round_trip_without_secrets(self):
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / "settings.json"
