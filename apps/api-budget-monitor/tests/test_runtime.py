@@ -6,6 +6,7 @@ import threading
 import unittest
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
+from types import SimpleNamespace
 from unittest.mock import Mock, patch
 
 from api_budget_monitor.config import AppConfig, ExternalAgentsRuntimeConfig, load_config, save_config
@@ -29,9 +30,45 @@ class RuntimeConfigTests(unittest.TestCase):
                 "APPDATA": appdata,
                 "TUNNEL_CLIENT_PROFILE_DIR": "",
                 "XDG_CONFIG_HOME": "",
-            }, clear=False), patch("api_budget_monitor.runtime.os.name", "nt"):
-                expected = Path.home() / ".config" / "tunnel-client" / "external-agents.yaml"
+                "HOME": "",
+            }, clear=False), patch("api_budget_monitor.runtime.os", SimpleNamespace(name="nt", getenv=os.getenv, environ=os.environ)):
+                expected = Path(appdata) / "tunnel-client" / "external-agents.yaml"
+                expected.parent.mkdir()
+                expected.touch()
                 self.assertEqual(tunnel_profile_path("external-agents"), expected)
+                self.assertTrue(tunnel_profile_path("external-agents").is_file())
+
+    def test_profile_directory_precedence_matches_windows_client(self):
+        values = {
+            "TUNNEL_CLIENT_PROFILE_DIR": "explicit",
+            "XDG_CONFIG_HOME": "xdg",
+            "HOME": "home",
+            "APPDATA": "roaming",
+        }
+        with patch("api_budget_monitor.runtime.os", SimpleNamespace(name="nt", getenv=os.getenv, environ=os.environ)):
+            for variable, expected in [
+                ("TUNNEL_CLIENT_PROFILE_DIR", Path("explicit")),
+                ("XDG_CONFIG_HOME", Path("xdg/tunnel-client")),
+                ("HOME", Path("home/.config/tunnel-client")),
+                ("APPDATA", Path("roaming/tunnel-client")),
+            ]:
+                with self.subTest(variable=variable), patch.dict(os.environ, values):
+                    self.assertEqual(tunnel_profile_path("external-agents"), expected / "external-agents.yaml")
+                values[variable] = ""
+
+    def test_windows_without_home_or_appdata_fails_explicitly(self):
+        with patch.dict(os.environ, {key: "" for key in [
+            "TUNNEL_CLIENT_PROFILE_DIR", "XDG_CONFIG_HOME", "HOME", "APPDATA",
+        ]}), patch("api_budget_monitor.runtime.os", SimpleNamespace(name="nt", getenv=os.getenv, environ=os.environ)):
+            with self.assertRaises(ValueError):
+                tunnel_profile_path("external-agents")
+
+    def test_unix_default_remains_home_config_directory(self):
+        with patch.dict(os.environ, {key: "" for key in [
+            "TUNNEL_CLIENT_PROFILE_DIR", "XDG_CONFIG_HOME", "HOME",
+        ]}), patch("api_budget_monitor.runtime.os", SimpleNamespace(name="posix", getenv=os.getenv, environ=os.environ)):
+            self.assertEqual(tunnel_profile_path("external-agents"),
+                             Path.home() / ".config/tunnel-client/external-agents.yaml")
 
     def test_runtime_settings_round_trip_without_secrets(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -157,6 +194,9 @@ class RuntimeWorkflowTests(unittest.TestCase):
                  patch("api_budget_monitor.runtime.get_tunnel_credential", return_value=key):
                 command, _, environment, logged_credential = _worker_command("tunnel", config, Path(directory), Path(directory))
             self.assertNotIn(key, command)
+            self.assertNotIn("--profile", command)
+            self.assertEqual(command[command.index("--profile-file") + 1], str(profile))
+            self.assertEqual(command[command.index("--log.file") + 1], "")
             self.assertEqual(environment["CONTROL_PLANE_API_KEY"], key)
             self.assertEqual(logged_credential, key)
 

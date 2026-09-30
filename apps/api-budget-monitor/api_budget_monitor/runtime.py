@@ -75,9 +75,15 @@ def tunnel_profile_path(profile: str) -> Path:
         directory = Path(os.environ["TUNNEL_CLIENT_PROFILE_DIR"])
     elif os.getenv("XDG_CONFIG_HOME"):
         directory = Path(os.environ["XDG_CONFIG_HOME"]) / "tunnel-client"
+    elif os.getenv("HOME"):
+        directory = Path(os.environ["HOME"]) / ".config" / "tunnel-client"
+    elif os.name == "nt":
+        # Verified with tunnel-client 0.0.15 on Windows. Without HOME it
+        # uses the native config directory, despite the CLI help's Unix default.
+        if not os.getenv("APPDATA"):
+            raise ValueError("APPDATA is required to locate the Windows tunnel profile.")
+        directory = Path(os.environ["APPDATA"]) / "tunnel-client"
     else:
-        # Match tunnel-client's native profile lookup on every platform:
-        # TUNNEL_CLIENT_PROFILE_DIR -> XDG_CONFIG_HOME -> ~/.config/tunnel-client.
         directory = Path.home() / ".config" / "tunnel-client"
     return directory / f"{profile}.yaml"
 
@@ -668,11 +674,14 @@ def _worker_command(component: str, config: AppConfig, config_dir: Path, runtime
         port = tunnel_health_port(profile_file)
         url_file = runtime_dir / "tunnel-health.url"
         pid_file = runtime_dir / "tunnel-client.pid"
-        command = [str(client), "run", "--profile", profile,
+        # Use exactly the file validated above. The Windows client's named
+        # profile loader can reject a regular file with a statat link error.
+        # Empty log.file writes to the captured pipe; "stdout" is a filename.
+        command = [str(client), "run", "--profile-file", str(profile_file),
                    "--control-plane.api-key", "env:CONTROL_PLANE_API_KEY",
                    "--health.listen-addr", f"127.0.0.1:{port}",
                    "--health.url-file", str(url_file), "--pid.file", str(pid_file),
-                   "--log.file", "stdout", "--log.format", "json", "--log.level", "info"]
+                   "--log.file", "", "--log.format", "json", "--log.level", "info"]
         env = os.environ.copy()
         env["CONTROL_PLANE_API_KEY"] = credential
         return command, service_path(config), env, credential
