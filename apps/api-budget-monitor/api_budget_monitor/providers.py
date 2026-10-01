@@ -3,6 +3,8 @@ from __future__ import annotations
 import json
 from dataclasses import dataclass
 from datetime import datetime, timezone
+from decimal import Decimal, InvalidOperation
+from math import isfinite
 from urllib.error import HTTPError, URLError
 from urllib.parse import quote
 from urllib.request import Request, urlopen
@@ -19,6 +21,16 @@ class HttpResult:
 
 def _get_json(url: str, headers: dict[str, str], timeout: float = 8.0) -> HttpResult:
     request = Request(url, headers=headers, method="GET")
+    return _request_json(request, timeout)
+
+
+def _post_json(url: str, headers: dict[str, str], payload: dict, timeout: float = 8.0) -> HttpResult:
+    request = Request(url, headers={**headers, "Content-Type": "application/json"},
+                      data=json.dumps(payload).encode("utf-8"), method="POST")
+    return _request_json(request, timeout)
+
+
+def _request_json(request: Request, timeout: float) -> HttpResult:
     try:
         with urlopen(request, timeout=timeout) as response:
             body = response.read().decode("utf-8")
@@ -32,6 +44,8 @@ def _get_json(url: str, headers: dict[str, str], timeout: float = 8.0) -> HttpRe
         return HttpResult(exc.code, payload, f"HTTP {exc.code}")
     except (URLError, TimeoutError, OSError) as exc:
         return HttpResult(0, None, str(exc))
+    except (ValueError, UnicodeError):
+        return HttpResult(0, None, "Invalid JSON response")
 
 
 def _fallback_until(provider_cfg: dict, native_until: str | None = None) -> str | None:
@@ -121,6 +135,113 @@ def fetch_openrouter(provider_cfg: dict, secrets: dict[str, str]) -> ProviderSna
     )
 
 
+def _billing_number(value: object, *, cents: bool = False) -> Decimal:
+    if isinstance(value, bool) or not isinstance(value, (str, int, float)):
+        raise ValueError("Invalid billing amount")
+    number = Decimal(str(value))
+    if not number.is_finite() or (cents and number != number.to_integral_value()):
+        raise ValueError("Invalid billing amount")
+    return number
+
+
+def _xai_credit_estimate(base: str, headers: dict[str, str]) -> tuple[float | None, str]:
+    # The public schema does not promise a live usable-credit total. Only derive
+    # an estimate for a reconciled, successful purchase-only ledger; never deduct
+    # historical usage again from a ledger containing settled SPEND entries.
+    balance = _get_json(base + "/prepaid/balance", headers)
+    if balance.status != 200:
+        return None, f"Prepaid balance unavailable (HTTP {balance.status})"
+    now = datetime.now(timezone.utc).replace(microsecond=0)
+    try:
+        payload = balance.payload
+        if not isinstance(payload, dict) or set(payload) - {"total", "changes"}:
+            raise ValueError
+        total = _billing_number(payload["total"]["val"], cents=True)
+        changes = payload["changes"]
+        if not isinstance(changes, list) or not changes:
+            raise ValueError
+        purchases = Decimal(0)
+        times = []
+        documented_fields = {
+            "teamId", "changeOrigin", "topupStatus", "amount", "invoiceId", "invoiceNumber",
+            "createTime", "createTs", "spendBpKeyYear", "spendBpKeyMonth", "paymentProcessor",
+        }
+        for change in changes:
+            if not isinstance(change, dict) or set(change) - documented_fields:
+                raise ValueError
+            if change["changeOrigin"] not in ("PURCHASE", "AUTO_PURCHASE") or change["topupStatus"] != "SUCCEEDED":
+                raise ValueError
+            amount = _billing_number(change["amount"]["val"], cents=True)
+            when = datetime.fromisoformat(change["createTime"].replace("Z", "+00:00"))
+            if amount >= 0 or when.tzinfo is None or when >= now:
+                raise ValueError
+            purchases += amount
+            times.append(when.astimezone(timezone.utc))
+        if purchases != total:
+            raise ValueError
+        start = min(times).replace(microsecond=0)
+        # A local conservative support ceiling, not an assertion of xAI's expiry
+        # policy: the public billing schema cannot establish old-credit validity.
+        if (now - start).days >= 365:
+            return None, "Old credit validity/expiry cannot be established"
+    except (KeyError, TypeError, ValueError, AttributeError, InvalidOperation):
+        return None, "Unsupported or incomplete prepaid ledger (adjustments, refunds, expiry or settled spend)"
+
+    preview = _get_json(base + "/postpaid/invoice/preview", headers)
+    if preview.status != 200:
+        return None, f"Billing preview unavailable (HTTP {preview.status})"
+    try:
+        data = preview.payload
+        invoice = data["coreInvoice"]
+        cycle = data["billingCycle"]
+        if cycle != {"year": now.year, "month": now.month}:
+            raise ValueError
+        # Do not mix a gross usage total with postpaid allowance, promotional
+        # credits or invoice corrections whose credit allocation is unspecified.
+        zeros = [data["effectiveSpendingLimit"], data["defaultCredits"],
+                 invoice["autoCreditsIssued"], invoice["defaultCreditsIssued"],
+                 invoice["totalWithCorr"]["val"]]
+        if any(_billing_number(value, cents=True) != 0 for value in zeros):
+            raise ValueError
+        if _billing_number(invoice["prepaidCredits"]["val"], cents=True) != total:
+            raise ValueError
+    except (KeyError, TypeError, ValueError, InvalidOperation):
+        return None, "Postpaid, promotional, adjusted or inconsistent billing cannot be reconstructed"
+
+    query = {"analyticsRequest": {
+        "timeRange": {"startTime": start.strftime("%Y-%m-%d %H:%M:%S"),
+                      "endTime": now.strftime("%Y-%m-%d %H:%M:%S"), "timezone": "Etc/GMT"},
+        "timeUnit": "TIME_UNIT_NONE",
+        "values": [{"name": "usd", "aggregation": "AGGREGATION_SUM"}],
+        "groupBy": [], "filters": [],
+    }}
+    usage = _post_json(base + "/usage", headers, query)
+    if usage.status != 200:
+        return None, f"Usage unavailable (HTTP {usage.status})"
+    try:
+        data = usage.payload
+        if data["limitReached"] is not False or len(data["timeSeries"]) != 1:
+            raise ValueError
+        series = data["timeSeries"][0]
+        if series.get("group") != [] or len(series["dataPoints"]) != 1:
+            raise ValueError
+        values = series["dataPoints"][0]["values"]
+        if len(values) != 1:
+            raise ValueError
+        spent = _billing_number(values[0])
+        if spent < 0:
+            raise ValueError
+        remaining = float(max(Decimal(0), -total / 100 - spent))
+        if not isfinite(remaining):
+            raise ValueError
+    except (KeyError, TypeError, ValueError, InvalidOperation):
+        return None, "Usage response missing, malformed or incomplete"
+    return remaining, (
+        f"Estimated: successful purchases minus reported USD usage, {start.isoformat()} to {now.isoformat()}. "
+        "Reporting delay, historical postpaid/promotional allocation and undisclosed expiry may differ from Console."
+    )
+
+
 def fetch_xai(provider_cfg: dict, secrets: dict[str, str]) -> ProviderSnapshot:
     api_key = secrets.get("XAI_API_KEY", "")
     management_key = secrets.get("XAI_MANAGEMENT_API_KEY", "")
@@ -131,21 +252,12 @@ def fetch_xai(provider_cfg: dict, secrets: dict[str, str]) -> ProviderSnapshot:
     detail: str | None = None
 
     if management_key and team_id:
-        balance = _get_json(
-            f"https://management-api.x.ai/v1/billing/teams/{quote(team_id)}/prepaid/balance",
+        remaining, detail = _xai_credit_estimate(
+            f"https://management-api.x.ai/v1/billing/teams/{quote(team_id, safe='')}",
             {"Authorization": f"Bearer {management_key}"},
         )
-        if balance.status == 200 and isinstance(balance.payload, dict):
-            try:
-                # xAI documents prepaid credit as a negative accounting value:
-                # e.g. -1000 means $10.00 available.
-                cents = float(balance.payload["total"]["val"])
-                remaining = max(0.0, -cents / 100.0)
-                balance_source = "auto"
-            except (KeyError, TypeError, ValueError):
-                detail = "Balance response missing total.val"
-        else:
-            detail = balance.error or "Prepaid balance unavailable"
+        if remaining is not None:
+            balance_source = "estimated"
 
     if remaining is None:
         manual = _manual_balance(provider_cfg)

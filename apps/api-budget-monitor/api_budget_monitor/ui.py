@@ -150,6 +150,8 @@ class ProviderCard(QFrame):
             )
             if snapshot.balance_source == "manual":
                 amount_text += " · Manual"
+            elif snapshot.balance_source == "estimated":
+                amount_text += " · Estimated"
         self.amount_label.setText(amount_text)
 
         if snapshot.percent is None:

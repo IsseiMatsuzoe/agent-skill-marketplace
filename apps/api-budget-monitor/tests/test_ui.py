@@ -178,6 +178,17 @@ class FlyoutTests(unittest.TestCase):
         self.assertEqual(self.popup.runtime_card.tunnel_label.text(), "Connected")
         self.assertEqual(self.popup.runtime_card.paid_label.text(), "Disabled")
 
+    def test_estimated_grok_balance_is_labeled_without_changing_layout(self):
+        snap = ProviderSnapshot("xai", "Grok", 2.179158, 10, KeyState.ACTIVE,
+                                balance_source="estimated", detail="Estimated: reporting delay")
+        card = self.popup.cards["xai"]
+        card.update_snapshot(snap)
+        self.assertEqual(card.amount_label.text(), "$2.18 of $10 · Estimated")
+        self.assertEqual(card.percent_label.text(), "21.8%")
+        self.assertEqual(card.status_label.toolTip(), snap.detail)
+        self.assertNotIn("Manual", card.amount_label.text())
+        self.assertEqual(self.popup.styleSheet(), APP_STYLE)
+
 
 if __name__ == "__main__":
     unittest.main()
