@@ -1,0 +1,37 @@
+name: Portable writing skills
+
+on:
+  pull_request:
+    paths:
+      - plugins/portable-agent-skills/**
+      - scripts/update_portable_skills.py
+      - .github/workflows/portable-skills.yml
+      - README.md
+  push:
+    branches: [main]
+    paths:
+      - plugins/portable-agent-skills/**
+      - scripts/update_portable_skills.py
+      - .github/workflows/portable-skills.yml
+      - README.md
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+      - name: Validate vendored files, routing wrappers, and linter
+        run: python3 scripts/update_portable_skills.py --check --zip dist/portable-agent-skills-v0.3.0.zip
+      - name: Save upload-ready plugin ZIP
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: portable-agent-skills-v0.3.0
+          path: dist/portable-agent-skills-v0.3.0.zip
+          if-no-files-found: error
+          retention-days: 14
