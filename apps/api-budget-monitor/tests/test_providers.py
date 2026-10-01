@@ -20,7 +20,7 @@ class ProviderParsingTests(unittest.TestCase):
         self.assertEqual(snap.key_state, KeyState.ACTIVE)
         self.assertEqual(snap.key_valid_until, "2026-10-30T00:00:00Z")
 
-    def test_xai_documented_negative_credit_accounting_maps_to_positive_balance(self):
+    def test_xai_purchase_total_without_ledger_is_unavailable(self):
         responses = [
             HttpResult(200, {"total": {"val": "-450"}}),
             HttpResult(200, {"data": []}),
@@ -30,7 +30,8 @@ class ProviderParsingTests(unittest.TestCase):
                 {"reference_budget_usd": 10.0},
                 {"XAI_MANAGEMENT_API_KEY": "mgmt", "XAI_TEAM_ID": "team", "XAI_API_KEY": "api"},
             )
-        self.assertEqual(snap.remaining_usd, 4.5)
+        self.assertIsNone(snap.remaining_usd)
+        self.assertEqual(snap.balance_source, "unavailable")
         self.assertEqual(snap.key_state, KeyState.ACTIVE)
 
     def test_xai_positive_accounting_value_is_not_presented_as_credit(self):
@@ -43,7 +44,7 @@ class ProviderParsingTests(unittest.TestCase):
                 {"reference_budget_usd": 10.0},
                 {"XAI_MANAGEMENT_API_KEY": "mgmt", "XAI_TEAM_ID": "team", "XAI_API_KEY": "api"},
             )
-        self.assertEqual(snap.remaining_usd, 0.0)
+        self.assertIsNone(snap.remaining_usd)
 
     def test_xai_management_metadata_supplies_expiry(self):
         responses = [
