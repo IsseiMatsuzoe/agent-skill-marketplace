@@ -1,0 +1,19 @@
+{
+  "repository": "nanaism/yomiyasu",
+  "commit": "7b61b2f0283265ce1986d76c67929622a775844d",
+  "license": "MIT",
+  "files": {
+    "SKILL.md": "8b4d2adaff007915463221fdc5560284ea0685c5",
+    "LICENSE": "f0d06f87f9b209d47c7f7963321ff71bab68c1e8",
+    "references/gemini-syntax.md": "33beda0e9feed26b4cb342ddbae01efe0e522b20",
+    "references/slop-catalog.md": "8e24f6942a5b5ce8e17499d8c254543ba75c5416",
+    "references/domains/tech.md": "5bd8bbe2d96811917bdb76606c4baf35842dc8dd",
+    "references/domains/business.md": "8b166357e95982a73417e1f857b48e2b20b9a8a8",
+    "references/domains/essay.md": "1fdadd190c65f650f0d6d5c35397e3692df44086",
+    "scripts/yomiyasu_lint.py": "cc3d832d6ca7aba320e05cc1831bbdd7a19201b4"
+  },
+  "path_mapping": {
+    "SKILL.md": "upstream.md"
+  },
+  "local_entrypoint": "SKILL.md"
+}

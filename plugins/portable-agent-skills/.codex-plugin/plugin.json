@@ -1,7 +1,7 @@
 {
   "name": "portable-agent-skills",
-  "version": "0.2.0",
-  "description": "Portable skills for Chat, Work, and Codex: Humanizer and Natural Japanese.",
+  "version": "0.3.0",
+  "description": "Portable writing skills for Chat, Work, and Codex: Humanizer, Natural Japanese, and yomiyasu.",
   "author": {
     "name": "Issei Matsuzoe"
   },
@@ -10,10 +10,12 @@
   "interface": {
     "displayName": "Portable Agent Skills",
     "shortDescription": "Portable skills for Chat, Work, and Codex.",
-    "longDescription": "A shared plugin with Humanizer v3.0.0 and Natural Japanese v1.5.0.",
+    "longDescription": "Humanizer v3.0.0, Natural Japanese v1.5.0, and pinned yomiyasu, with language- and task-specific selection.",
     "developerName": "Issei Matsuzoe",
     "category": "Productivity",
-    "capabilities": ["Write"],
-    "defaultPrompt": "Use the appropriate skill in this bundle for this writing task."
+    "capabilities": [
+      "Write"
+    ],
+    "defaultPrompt": "Choose one bundled writing skill for the target text and task. Honor an explicit skill name; otherwise use yomiyasu for existing Japanese prose, natural-japanese for new Japanese documents or diagnosis, and humanizer for non-Japanese prose. Do not automatically chain skills."
   }
 }
