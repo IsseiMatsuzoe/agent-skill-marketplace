@@ -44,7 +44,7 @@ The ChatGPT upload is a snapshot. Pushing GitHub changes does not update that cl
 
 ## Writing-skill selection and yomiyasu source
 
-Portable Agent Skills v0.3.0 contains three skill entrypoints. Explicit skill names override these defaults:
+Portable Agent Skills v0.3.1 contains three skill entrypoints. Explicit skill names override these defaults:
 
 | Task | Default skill |
 | --- | --- |
@@ -57,8 +57,8 @@ The target text determines the language. Japanese instructions asking to edit En
 
 Each `skills/<name>/SKILL.md` is a thin, local routing and host-compatibility wrapper. The complete upstream instructions are preserved byte-for-byte beside it as `upstream.md`, with the original support-file paths intact. These instructions guide host selection; they are not a deterministic runtime router, and host behavior still needs a smoke test after plugin refresh.
 
-`skills/yomiyasu/` includes the runtime files from [nanaism/yomiyasu](https://github.com/nanaism/yomiyasu), pinned to commit `7b61b2f0283265ce1986d76c67929622a775844d`. Its MIT license and `SOURCE.json` record attribution and upstream Git blob hashes. Only the entrypoint instructions, runtime references, linter, and license are included; upstream plugin manifests, duplicate skill directories, marketing assets, and development corpora are excluded.
+`skills/yomiyasu/` includes the runtime files from [nanaism/yomiyasu](https://github.com/nanaism/yomiyasu), pinned to release v1.0.7, commit `8dc47e2594dc63f3dc37cd2c36eaf549e54b4678`. Its MIT license and `SOURCE.json` record attribution and upstream Git blob hashes. Only the entrypoint instructions, runtime references, linter, diff checker, and license are included; upstream plugin manifests, duplicate skill directories, marketing assets, and development corpora are excluded.
 
-Yomiyasu's Python linter uses the standard library. When script execution is unavailable, review manually using the bundled instructions; do not report a linter pass or numeric score. Meaning preservation takes precedence over stylistic warnings. No MCP dependency or paid external-agent call is added.
+Yomiyasu v1.0.7's Python linter and diff checker use the standard library. When script execution is unavailable, review manually using the bundled instructions; do not report a linter pass or numeric score. Meaning preservation takes precedence over stylistic warnings. No MCP dependency or paid external-agent call is added.
 
-Validate offline with `python scripts/update_portable_skills.py --check`. Build the upload archive with `python scripts/update_portable_skills.py --check --zip dist/portable-agent-skills-v0.3.0.zip`. Only an explicit `--write` imports the pinned upstream files; review the commit and hashes before changing that pin. The ZIP has `plugin.json` at its root. GitHub updates do not refresh an installed ChatGPT snapshot: update the existing Portable Agent Skills plugin with the new ZIP, then start a new chat.
+Validate offline with `python scripts/update_portable_skills.py --check`. Build the upload archive with `python scripts/update_portable_skills.py --check --zip dist/portable-agent-skills-v0.3.1.zip`. Only an explicit `--write` imports the pinned upstream files; review the commit and hashes before changing that pin. The ZIP has `plugin.json` at its root. GitHub updates do not refresh an installed ChatGPT snapshot: update the existing Portable Agent Skills plugin with the new ZIP, then start a new chat.

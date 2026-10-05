@@ -1,16 +1,17 @@
 {
   "repository": "nanaism/yomiyasu",
-  "commit": "7b61b2f0283265ce1986d76c67929622a775844d",
+  "commit": "8dc47e2594dc63f3dc37cd2c36eaf549e54b4678",
   "license": "MIT",
   "files": {
-    "SKILL.md": "8b4d2adaff007915463221fdc5560284ea0685c5",
+    "SKILL.md": "8ead9c9dd9b907ee1b95d7c516e7173a29cb5667",
     "LICENSE": "f0d06f87f9b209d47c7f7963321ff71bab68c1e8",
-    "references/gemini-syntax.md": "33beda0e9feed26b4cb342ddbae01efe0e522b20",
-    "references/slop-catalog.md": "8e24f6942a5b5ce8e17499d8c254543ba75c5416",
-    "references/domains/tech.md": "5bd8bbe2d96811917bdb76606c4baf35842dc8dd",
-    "references/domains/business.md": "8b166357e95982a73417e1f857b48e2b20b9a8a8",
-    "references/domains/essay.md": "1fdadd190c65f650f0d6d5c35397e3692df44086",
-    "scripts/yomiyasu_lint.py": "cc3d832d6ca7aba320e05cc1831bbdd7a19201b4"
+    "references/gemini-syntax.md": "1eac704872e0304e8dbec7a2a210872956e5e534",
+    "references/slop-catalog.md": "1da551832b20d57afe2926e05c59f3c35e7a9fba",
+    "references/domains/tech.md": "64eed9ba0f0608529f2d8e93c9dca405d6e806ad",
+    "references/domains/business.md": "499fceb09570b66d2efcd6c089de2ec6a567d833",
+    "references/domains/essay.md": "9d9f337c61002d5ddbe701c03dbede8418766fbc",
+    "scripts/yomiyasu_lint.py": "35a1edd53a5762b029e12a2d95172c4685b9025d",
+    "scripts/yomiyasu_diff.py": "ff71c0815611fcf491f3b3f12fceb4cc4323edab"
   },
   "path_mapping": {
     "SKILL.md": "upstream.md"
