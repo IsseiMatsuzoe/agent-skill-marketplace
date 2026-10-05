@@ -1,7 +1,7 @@
 {
   "name": "portable-agent-skills",
-  "version": "0.4.0",
-  "description": "Portable writing skills for Chat, Work, and Codex: Humanizer, Natural Japanese, yomiyasu, and optional i-have-adhd formatting.",
+  "version": "0.5.0",
+  "description": "Portable skills for Chat, Work, and Codex: Humanizer, Natural Japanese, yomiyasu, optional i-have-adhd formatting, and explicit Hallmark UI audits.",
   "author": {
     "name": "Issei Matsuzoe"
   },
@@ -10,12 +10,12 @@
   "interface": {
     "displayName": "Portable Agent Skills",
     "shortDescription": "Portable skills for Chat, Work, and Codex.",
-    "longDescription": "Humanizer v3.0.0, Natural Japanese v1.5.0, and pinned yomiyasu, with language- and task-specific selection.",
+    "longDescription": "Three writing skills with language- and task-specific selection, optional i-have-adhd formatting, and explicit read-only Hallmark UI audits.",
     "developerName": "Issei Matsuzoe",
     "category": "Productivity",
     "capabilities": [
       "Write"
     ],
-    "defaultPrompt": "Choose one bundled writing skill for the target text and task. Honor an explicit skill name; otherwise use yomiyasu for existing Japanese prose, natural-japanese for new Japanese documents or diagnosis, and humanizer for non-Japanese prose. Do not automatically chain skills."
+    "defaultPrompt": "Choose one bundled writing skill for the target text and task. Honor an explicit skill name; otherwise use yomiyasu for existing Japanese prose, natural-japanese for new Japanese documents or diagnosis, and humanizer for non-Japanese prose. Do not automatically chain skills. Invoke i-have-adhd and Hallmark only when explicitly requested."
   }
 }

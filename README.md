@@ -44,7 +44,7 @@ The ChatGPT upload is a snapshot. Pushing GitHub changes does not update that cl
 
 ## Writing-skill selection and yomiyasu source
 
-Portable Agent Skills v0.4.0 contains three writing-skill entrypoints and the separately invoked i-have-adhd formatting mode. Explicit skill names override these defaults:
+Portable Agent Skills v0.5.0 contains three writing-skill entrypoints and the separately invoked i-have-adhd formatting and Hallmark UI audit skills. Explicit skill names override these defaults:
 
 | Task | Default skill |
 | --- | --- |
@@ -61,7 +61,7 @@ Each `skills/<name>/SKILL.md` is a thin, local routing and host-compatibility wr
 
 Yomiyasu v1.0.7's Python linter and diff checker use the standard library. When script execution is unavailable, review manually using the bundled instructions; do not report a linter pass or numeric score. Meaning preservation takes precedence over stylistic warnings. No MCP dependency or paid external-agent call is added.
 
-Validate offline with `python scripts/update_portable_skills.py --check`. Build the upload archive with `python scripts/update_portable_skills.py --check --zip dist/portable-agent-skills-v0.4.0.zip`. Only an explicit `--write` imports the pinned upstream files; review the commit and hashes before changing that pin. The ZIP has `plugin.json` at its root. GitHub updates do not refresh an installed ChatGPT snapshot: update the existing Portable Agent Skills plugin with the new ZIP, then start a new chat.
+Validate offline with `python scripts/update_portable_skills.py --check`. Build the upload archive with `python scripts/update_portable_skills.py --check --zip dist/portable-agent-skills-v0.5.0.zip`. Only an explicit `--write` imports the pinned upstream files; review the commit and hashes before changing that pin. The ZIP has `plugin.json` at its root. GitHub updates do not refresh an installed ChatGPT snapshot: update the existing Portable Agent Skills plugin with the new ZIP, then start a new chat.
 
 ## Optional i-have-adhd formatting
 
@@ -70,3 +70,11 @@ The instruction-only formatting skill comes from [ayghri/i-have-adhd](https://gi
 Invoke `$i-have-adhd` explicitly for a response, or explicitly request a session-wide mode. This does not imply an ADHD diagnosis. The wrapper preserves uncertainty, safety-relevant detail, the user's language and requested artifact format. It does not change the three writing skills' selection. `agents/openai.yaml` sets `allow_implicit_invocation: false`; hosts without this metadata must follow the wrapper's explicit-only description. The upstream's own small evaluation did not pass its release gate, so this packaging makes no quality guarantee.
 
 No upstream plugin hooks, SessionStart scripts, Node runtime, dependencies, accounts, or settings are imported. Check with `python scripts/update_i_have_adhd.py --check`; use its explicit `--write` only to re-import the reviewed files. Then run the bundle check and archive command above. Update the existing Portable Agent Skills cloud plugin with that ZIP, refresh the desktop snapshot, and start a new chat.
+
+## Optional Hallmark UI audit
+
+Hallmark is an explicit-only, read-only UI design audit by default. Invoke `$hallmark` or `hallmark audit` with a target page, source file, URL, or screenshot. Generic design requests do not activate it. Claude remains the design lead; Hallmark supplies evidence and recommendations within the accepted design direction. Design changes require an explicit request.
+
+The complete Markdown skill from [Nutlope/hallmark](https://github.com/Nutlope/hallmark), upstream version 1.1.0 at commit `13ac0ec7e148655948100b6396439e481361d690`, is preserved unchanged: the entrypoint is `upstream.md`, alongside 106 reference files and the MIT license (Hallmark contributors, 2026). `SOURCE.json` records all 108 upstream Git blob hashes and path mappings. Repository-level demo/guide links are recorded as commit-pinned URLs in `SOURCE.json`; those optional site files are not bundled. The thin local wrapper and `agents/openai.yaml` enforce explicit activation, evidence-based severity, Japanese typography checks, and no automatic writes or paid assets/services. Upstream aesthetic heuristics are not objective authorship or AI-quality measurements.
+
+No upstream hooks, runtime dependencies, site files, external fonts, or generated images are included. Audit findings cite observed source locations or screenshot regions; untested viewports and interactions remain unverified. Check all pinned files and local links offline with `python scripts/update_hallmark.py --check`. Its `--write` re-imports only the reviewed, hash-pinned instruction files. Use the bundle ZIP procedure above to update the existing cloud plugin, and the supported Codex marketplace/plugin commands to update the local installed plugin.

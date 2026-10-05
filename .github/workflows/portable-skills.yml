@@ -5,6 +5,7 @@ on:
     paths:
       - plugins/portable-agent-skills/**
       - scripts/update_portable_skills.py
+      - scripts/update_hallmark.py
       - .github/workflows/portable-skills.yml
       - README.md
   push:
@@ -12,6 +13,7 @@ on:
     paths:
       - plugins/portable-agent-skills/**
       - scripts/update_portable_skills.py
+      - scripts/update_hallmark.py
       - .github/workflows/portable-skills.yml
       - README.md
 

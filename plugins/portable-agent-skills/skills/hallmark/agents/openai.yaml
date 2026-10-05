@@ -1,0 +1,6 @@
+interface:
+  display_name: "Hallmark UI audit"
+  short_description: "Explicit, read-only UI audit with Japanese typography checks."
+  default_prompt: "Use $hallmark to audit the specified UI without editing it; report evidence and practical recommendations."
+policy:
+  allow_implicit_invocation: false
