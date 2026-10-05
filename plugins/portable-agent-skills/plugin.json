@@ -1,8 +1,8 @@
 {
   "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
   "name": "portable-agent-skills",
-  "version": "0.3.0",
-  "description": "Portable writing skills for Chat, Work, and Codex: Humanizer, Natural Japanese, and yomiyasu.",
+  "version": "0.4.0",
+  "description": "Portable writing skills for Chat, Work, and Codex: Humanizer, Natural Japanese, yomiyasu, and optional i-have-adhd formatting.",
   "author": {
     "name": "Issei Matsuzoe"
   }

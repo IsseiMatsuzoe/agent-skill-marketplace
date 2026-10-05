@@ -2,7 +2,7 @@
 """Import pinned yomiyasu files, validate the portable bundle, and build its ZIP.
 
 Default/--check is offline. --write explicitly imports the reviewed upstream
-snapshot and applies the v0.3.0 migration. No dependency installation or LLM calls.
+snapshot and applies the v0.4.0 migration. No dependency installation or LLM calls.
 """
 from __future__ import annotations
 
@@ -12,24 +12,28 @@ import json
 from pathlib import Path
 import subprocess
 import sys
+import tempfile
 from urllib.request import urlopen
 import zipfile
+
+from update_i_have_adhd import validate as validate_adhd
 
 ROOT = Path(__file__).resolve().parents[1]
 PLUGIN = ROOT / "plugins/portable-agent-skills"
 SKILLS = PLUGIN / "skills"
-VERSION = "0.3.0"
+VERSION = "0.4.0"
 UPSTREAM = "nanaism/yomiyasu"
-COMMIT = "7b61b2f0283265ce1986d76c67929622a775844d"
+COMMIT = "8dc47e2594dc63f3dc37cd2c36eaf549e54b4678"
 FILES = {
-    "SKILL.md": "8b4d2adaff007915463221fdc5560284ea0685c5",
+    "SKILL.md": "8ead9c9dd9b907ee1b95d7c516e7173a29cb5667",
     "LICENSE": "f0d06f87f9b209d47c7f7963321ff71bab68c1e8",
-    "references/gemini-syntax.md": "33beda0e9feed26b4cb342ddbae01efe0e522b20",
-    "references/slop-catalog.md": "8e24f6942a5b5ce8e17499d8c254543ba75c5416",
-    "references/domains/tech.md": "5bd8bbe2d96811917bdb76606c4baf35842dc8dd",
-    "references/domains/business.md": "8b166357e95982a73417e1f857b48e2b20b9a8a8",
-    "references/domains/essay.md": "1fdadd190c65f650f0d6d5c35397e3692df44086",
-    "scripts/yomiyasu_lint.py": "cc3d832d6ca7aba320e05cc1831bbdd7a19201b4",
+    "references/gemini-syntax.md": "1eac704872e0304e8dbec7a2a210872956e5e534",
+    "references/slop-catalog.md": "1da551832b20d57afe2926e05c59f3c35e7a9fba",
+    "references/domains/tech.md": "64eed9ba0f0608529f2d8e93c9dca405d6e806ad",
+    "references/domains/business.md": "499fceb09570b66d2efcd6c089de2ec6a567d833",
+    "references/domains/essay.md": "9d9f337c61002d5ddbe701c03dbede8418766fbc",
+    "scripts/yomiyasu_lint.py": "35a1edd53a5762b029e12a2d95172c4685b9025d",
+    "scripts/yomiyasu_diff.py": "ff71c0815611fcf491f3b3f12fceb4cc4323edab"
 }
 LEGACY = {
     "humanizer": "d375fbf3e3ee8fb047c379bced82df3713c6ed3b",
@@ -56,12 +60,12 @@ Use scripts only when the host can actually execute them. Do not claim linting, 
 EXTRA = {
     "humanizer": "\nUse the upstream embedded mode when polishing text as part of another task.\n",
     "natural-japanese": "\nFor the no-execution fallback, read `references/manual-checklist.md`. Keep scoring/diagnosis read-only unless a rewrite is requested. Do not substitute a fabricated numeric score for an unavailable check.\n",
-    "yomiyasu": "\nRead `references/gemini-syntax.md` and the applicable file under `references/domains/` (tech, business, or essay). The unchanged upstream meaning-preservation rules take precedence over stylistic suggestions in those references. For manual review, compare claims, emphasis, certainty, sentence function, and implications before and after editing. Linter findings are suggestions, not proof of authorship or permission to change technical meaning. Keep the upstream maximum of two correction attempts when lint is used.\n",
+    "yomiyasu": "\nRead `references/gemini-syntax.md` and the applicable file under `references/domains/` (tech, business, or essay). The unchanged upstream meaning-preservation rules take precedence over stylistic suggestions in those references. For manual review, compare claims, emphasis, certainty, sentence function, and implications before and after editing. Linter findings are suggestions, not proof of authorship or permission to change technical meaning. Keep the upstream maximum of two correction attempts when lint is used. After rewriting, follow upstream Step 4 with `scripts/yomiyasu_diff.py` when execution is available, or perform its manual comparison. Preserve register, actors, conditions, logical relations, and sentence function. Diff findings are review candidates; make at most one correction and do not repeat the diff loop.\n",
 }
 README_SECTION = """
 ## Writing-skill selection and yomiyasu source
 
-Portable Agent Skills v0.3.0 contains three skill entrypoints. Explicit skill names override these defaults:
+Portable Agent Skills v0.4.0 contains three writing-skill entrypoints and the separately invoked i-have-adhd formatting mode. Explicit skill names override these defaults:
 
 | Task | Default skill |
 | --- | --- |
@@ -74,11 +78,11 @@ The target text determines the language. Japanese instructions asking to edit En
 
 Each `skills/<name>/SKILL.md` is a thin, local routing and host-compatibility wrapper. The complete upstream instructions are preserved byte-for-byte beside it as `upstream.md`, with the original support-file paths intact. These instructions guide host selection; they are not a deterministic runtime router, and host behavior still needs a smoke test after plugin refresh.
 
-`skills/yomiyasu/` includes the runtime files from [nanaism/yomiyasu](https://github.com/nanaism/yomiyasu), pinned to commit `7b61b2f0283265ce1986d76c67929622a775844d`. Its MIT license and `SOURCE.json` record attribution and upstream Git blob hashes. Only the entrypoint instructions, runtime references, linter, and license are included; upstream plugin manifests, duplicate skill directories, marketing assets, and development corpora are excluded.
+`skills/yomiyasu/` includes the runtime files from [nanaism/yomiyasu](https://github.com/nanaism/yomiyasu), pinned to release v1.0.7, commit `8dc47e2594dc63f3dc37cd2c36eaf549e54b4678`. Its MIT license and `SOURCE.json` record attribution and upstream Git blob hashes. Only the entrypoint instructions, runtime references, linter, diff checker, and license are included; upstream plugin manifests, duplicate skill directories, marketing assets, and development corpora are excluded.
 
-Yomiyasu's Python linter uses the standard library. When script execution is unavailable, review manually using the bundled instructions; do not report a linter pass or numeric score. Meaning preservation takes precedence over stylistic warnings. No MCP dependency or paid external-agent call is added.
+Yomiyasu v1.0.7's Python linter and diff checker use the standard library. When script execution is unavailable, review manually using the bundled instructions; do not report a linter pass or numeric score. Meaning preservation takes precedence over stylistic warnings. No MCP dependency or paid external-agent call is added.
 
-Validate offline with `python scripts/update_portable_skills.py --check`. Build the upload archive with `python scripts/update_portable_skills.py --check --zip dist/portable-agent-skills-v0.3.0.zip`. Only an explicit `--write` imports the pinned upstream files; review the commit and hashes before changing that pin. The ZIP has `plugin.json` at its root. GitHub updates do not refresh an installed ChatGPT snapshot: update the existing Portable Agent Skills plugin with the new ZIP, then start a new chat.
+Validate offline with `python scripts/update_portable_skills.py --check`. Build the upload archive with `python scripts/update_portable_skills.py --check --zip dist/portable-agent-skills-v0.4.0.zip`. Only an explicit `--write` imports the pinned upstream files; review the commit and hashes before changing that pin. The ZIP has `plugin.json` at its root. GitHub updates do not refresh an installed ChatGPT snapshot: update the existing Portable Agent Skills plugin with the new ZIP, then start a new chat.
 """
 
 
@@ -135,7 +139,7 @@ def migrate() -> None:
     for name in DESCRIPTIONS:
         (SKILLS / name / "SKILL.md").write_text(wrapper(name), encoding="utf-8")
     write_json(SKILLS / "yomiyasu/SOURCE.json", origin())
-    description = "Portable writing skills for Chat, Work, and Codex: Humanizer, Natural Japanese, and yomiyasu."
+    description = "Portable writing skills for Chat, Work, and Codex: Humanizer, Natural Japanese, yomiyasu, and optional i-have-adhd formatting."
     for relative in ("plugin.json", ".codex-plugin/plugin.json"):
         path = PLUGIN / relative
         manifest = json.loads(path.read_text(encoding="utf-8"))
@@ -154,12 +158,15 @@ def migrate() -> None:
     text = text.replace("The included files are unchanged copies from", "The instructions in `skills/natural-japanese/upstream.md` and its support files are unchanged copies from")
     text = text.replace("`plugins/portable-agent-skills/skills/humanizer/SKILL.md`: the Humanizer skill.", "`plugins/portable-agent-skills/skills/humanizer/SKILL.md`: the Humanizer routing wrapper; `upstream.md` preserves the original instructions.")
     section = "## Writing-skill selection and yomiyasu source"
+    optional_section = "## Optional i-have-adhd formatting"
+    optional_docs = ("\n" + optional_section + text.split(optional_section, 1)[1]) if optional_section in text else ""
     if section in text:
         text = text.split(section, 1)[0].rstrip() + "\n"
-    path.write_text(text.rstrip() + "\n" + README_SECTION, encoding="utf-8")
+    path.write_text(text.rstrip() + "\n" + README_SECTION + optional_docs, encoding="utf-8")
 
 
 def validate() -> None:
+    validate_adhd()
     checks = 0
     for name, expected in LEGACY.items():
         require(blob_sha((SKILLS / name / "upstream.md").read_bytes()) == expected, f"{name} upstream changed")
@@ -170,7 +177,7 @@ def validate() -> None:
     require(json.loads((SKILLS / "yomiyasu/SOURCE.json").read_text(encoding="utf-8")) == origin(), "Invalid provenance")
     checks += 1
     entries = sorted(path.parent.name for path in SKILLS.rglob("SKILL.md"))
-    require(entries == sorted(DESCRIPTIONS), f"Unexpected/duplicate skill entrypoints: {entries}")
+    require(entries == sorted([*DESCRIPTIONS, "i-have-adhd"]), f"Unexpected/duplicate skill entrypoints: {entries}")
     checks += 1
     for name in DESCRIPTIONS:
         require((SKILLS / name / "SKILL.md").read_text(encoding="utf-8") == wrapper(name), f"Routing wrapper mismatch: {name}")
@@ -198,7 +205,21 @@ def validate() -> None:
         if expected_returncode:
             require(any(item["rule"] == "metaphor_verb" for item in report["findings"]), "Missed metaphor warning")
         checks += 1
-    print(f"PASS: {checks} integrity, packaging, wrapper, and linter smoke checks.")
+    diff_checker = SKILLS / "yomiyasu/scripts/yomiyasu_diff.py"
+    with tempfile.TemporaryDirectory(prefix="yomiyasu-check-") as temporary:
+        original = Path(temporary) / "original.txt"
+        rewritten = Path(temporary) / "rewritten.txt"
+        original.write_text("設定を保存してください。", encoding="utf-8")
+        for text, changed in [("設定を保存してください。", False), ("設定を保存しました。", True)]:
+            rewritten.write_text(text, encoding="utf-8")
+            result = subprocess.run([sys.executable, str(diff_checker), str(original), str(rewritten), "--json"],
+                                    text=True, encoding="utf-8", capture_output=True, timeout=10, check=False)
+            require(result.returncode == 0, f"Diff checker failed: {result.stderr}")
+            report = json.loads(result.stdout)
+            require(bool(report["markers"]) == changed and bool(report["endings"]["changes"]) == changed,
+                    "Diff checker missed a sentence-function change or flagged unchanged text")
+            checks += 1
+    print(f"PASS: {checks} integrity, packaging, wrapper, linter, and diff smoke checks.")
     print("Host skill selection and semantic rewrite quality require a separate interactive smoke test after refresh.")
 
 
@@ -214,7 +235,7 @@ def package(output: Path) -> None:
             archive.write(path, path.relative_to(PLUGIN).as_posix())
     with zipfile.ZipFile(output) as archive:
         require("plugin.json" in archive.namelist(), "Plugin manifest is not at ZIP root")
-        require(sum(name.endswith("/SKILL.md") for name in archive.namelist()) == 3, "Wrong skill count in ZIP")
+        require(sum(name.endswith("/SKILL.md") for name in archive.namelist()) == 4, "Wrong skill count in ZIP")
         require(archive.testzip() is None, "Corrupt ZIP")
     print(f"ZIP: {output.name}; SHA256: {hashlib.sha256(output.read_bytes()).hexdigest()}")
 
@@ -222,7 +243,7 @@ def package(output: Path) -> None:
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     mode = parser.add_mutually_exclusive_group()
-    mode.add_argument("--write", action="store_true", help="Import the pinned snapshot and apply v0.3.0")
+    mode.add_argument("--write", action="store_true", help="Import the pinned snapshot and apply v0.4.0")
     mode.add_argument("--check", action="store_true", help="Validate offline (default)")
     parser.add_argument("--zip", type=Path, help="Build the plugin archive after validation")
     args = parser.parse_args()
