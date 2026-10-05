@@ -44,7 +44,7 @@ The ChatGPT upload is a snapshot. Pushing GitHub changes does not update that cl
 
 ## Writing-skill selection and yomiyasu source
 
-Portable Agent Skills v0.3.1 contains three skill entrypoints. Explicit skill names override these defaults:
+Portable Agent Skills v0.4.0 contains three writing-skill entrypoints and the separately invoked i-have-adhd formatting mode. Explicit skill names override these defaults:
 
 | Task | Default skill |
 | --- | --- |
@@ -61,4 +61,12 @@ Each `skills/<name>/SKILL.md` is a thin, local routing and host-compatibility wr
 
 Yomiyasu v1.0.7's Python linter and diff checker use the standard library. When script execution is unavailable, review manually using the bundled instructions; do not report a linter pass or numeric score. Meaning preservation takes precedence over stylistic warnings. No MCP dependency or paid external-agent call is added.
 
-Validate offline with `python scripts/update_portable_skills.py --check`. Build the upload archive with `python scripts/update_portable_skills.py --check --zip dist/portable-agent-skills-v0.3.1.zip`. Only an explicit `--write` imports the pinned upstream files; review the commit and hashes before changing that pin. The ZIP has `plugin.json` at its root. GitHub updates do not refresh an installed ChatGPT snapshot: update the existing Portable Agent Skills plugin with the new ZIP, then start a new chat.
+Validate offline with `python scripts/update_portable_skills.py --check`. Build the upload archive with `python scripts/update_portable_skills.py --check --zip dist/portable-agent-skills-v0.4.0.zip`. Only an explicit `--write` imports the pinned upstream files; review the commit and hashes before changing that pin. The ZIP has `plugin.json` at its root. GitHub updates do not refresh an installed ChatGPT snapshot: update the existing Portable Agent Skills plugin with the new ZIP, then start a new chat.
+
+## Optional i-have-adhd formatting
+
+The instruction-only formatting skill comes from [ayghri/i-have-adhd](https://github.com/ayghri/i-have-adhd), commit `839872f9d1cd634fed642b4589ce7226199cc15f`. Its original instructions are unchanged in `skills/i-have-adhd/upstream.md`; `SOURCE.json` records the Git blob hashes and path mapping. The MIT license credits Ayoub Ghriss (2026).
+
+Invoke `$i-have-adhd` explicitly for a response, or explicitly request a session-wide mode. This does not imply an ADHD diagnosis. The wrapper preserves uncertainty, safety-relevant detail, the user's language and requested artifact format. It does not change the three writing skills' selection. `agents/openai.yaml` sets `allow_implicit_invocation: false`; hosts without this metadata must follow the wrapper's explicit-only description. The upstream's own small evaluation did not pass its release gate, so this packaging makes no quality guarantee.
+
+No upstream plugin hooks, SessionStart scripts, Node runtime, dependencies, accounts, or settings are imported. Check with `python scripts/update_i_have_adhd.py --check`; use its explicit `--write` only to re-import the reviewed files. Then run the bundle check and archive command above. Update the existing Portable Agent Skills cloud plugin with that ZIP, refresh the desktop snapshot, and start a new chat.

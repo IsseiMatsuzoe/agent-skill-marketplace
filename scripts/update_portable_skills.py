@@ -2,7 +2,7 @@
 """Import pinned yomiyasu files, validate the portable bundle, and build its ZIP.
 
 Default/--check is offline. --write explicitly imports the reviewed upstream
-snapshot and applies the v0.3.1 migration. No dependency installation or LLM calls.
+snapshot and applies the v0.4.0 migration. No dependency installation or LLM calls.
 """
 from __future__ import annotations
 
@@ -16,10 +16,12 @@ import tempfile
 from urllib.request import urlopen
 import zipfile
 
+from update_i_have_adhd import validate as validate_adhd
+
 ROOT = Path(__file__).resolve().parents[1]
 PLUGIN = ROOT / "plugins/portable-agent-skills"
 SKILLS = PLUGIN / "skills"
-VERSION = "0.3.1"
+VERSION = "0.4.0"
 UPSTREAM = "nanaism/yomiyasu"
 COMMIT = "8dc47e2594dc63f3dc37cd2c36eaf549e54b4678"
 FILES = {
@@ -63,7 +65,7 @@ EXTRA = {
 README_SECTION = """
 ## Writing-skill selection and yomiyasu source
 
-Portable Agent Skills v0.3.1 contains three skill entrypoints. Explicit skill names override these defaults:
+Portable Agent Skills v0.4.0 contains three writing-skill entrypoints and the separately invoked i-have-adhd formatting mode. Explicit skill names override these defaults:
 
 | Task | Default skill |
 | --- | --- |
@@ -80,7 +82,7 @@ Each `skills/<name>/SKILL.md` is a thin, local routing and host-compatibility wr
 
 Yomiyasu v1.0.7's Python linter and diff checker use the standard library. When script execution is unavailable, review manually using the bundled instructions; do not report a linter pass or numeric score. Meaning preservation takes precedence over stylistic warnings. No MCP dependency or paid external-agent call is added.
 
-Validate offline with `python scripts/update_portable_skills.py --check`. Build the upload archive with `python scripts/update_portable_skills.py --check --zip dist/portable-agent-skills-v0.3.1.zip`. Only an explicit `--write` imports the pinned upstream files; review the commit and hashes before changing that pin. The ZIP has `plugin.json` at its root. GitHub updates do not refresh an installed ChatGPT snapshot: update the existing Portable Agent Skills plugin with the new ZIP, then start a new chat.
+Validate offline with `python scripts/update_portable_skills.py --check`. Build the upload archive with `python scripts/update_portable_skills.py --check --zip dist/portable-agent-skills-v0.4.0.zip`. Only an explicit `--write` imports the pinned upstream files; review the commit and hashes before changing that pin. The ZIP has `plugin.json` at its root. GitHub updates do not refresh an installed ChatGPT snapshot: update the existing Portable Agent Skills plugin with the new ZIP, then start a new chat.
 """
 
 
@@ -137,7 +139,7 @@ def migrate() -> None:
     for name in DESCRIPTIONS:
         (SKILLS / name / "SKILL.md").write_text(wrapper(name), encoding="utf-8")
     write_json(SKILLS / "yomiyasu/SOURCE.json", origin())
-    description = "Portable writing skills for Chat, Work, and Codex: Humanizer, Natural Japanese, and yomiyasu."
+    description = "Portable writing skills for Chat, Work, and Codex: Humanizer, Natural Japanese, yomiyasu, and optional i-have-adhd formatting."
     for relative in ("plugin.json", ".codex-plugin/plugin.json"):
         path = PLUGIN / relative
         manifest = json.loads(path.read_text(encoding="utf-8"))
@@ -156,12 +158,15 @@ def migrate() -> None:
     text = text.replace("The included files are unchanged copies from", "The instructions in `skills/natural-japanese/upstream.md` and its support files are unchanged copies from")
     text = text.replace("`plugins/portable-agent-skills/skills/humanizer/SKILL.md`: the Humanizer skill.", "`plugins/portable-agent-skills/skills/humanizer/SKILL.md`: the Humanizer routing wrapper; `upstream.md` preserves the original instructions.")
     section = "## Writing-skill selection and yomiyasu source"
+    optional_section = "## Optional i-have-adhd formatting"
+    optional_docs = ("\n" + optional_section + text.split(optional_section, 1)[1]) if optional_section in text else ""
     if section in text:
         text = text.split(section, 1)[0].rstrip() + "\n"
-    path.write_text(text.rstrip() + "\n" + README_SECTION, encoding="utf-8")
+    path.write_text(text.rstrip() + "\n" + README_SECTION + optional_docs, encoding="utf-8")
 
 
 def validate() -> None:
+    validate_adhd()
     checks = 0
     for name, expected in LEGACY.items():
         require(blob_sha((SKILLS / name / "upstream.md").read_bytes()) == expected, f"{name} upstream changed")
@@ -172,7 +177,7 @@ def validate() -> None:
     require(json.loads((SKILLS / "yomiyasu/SOURCE.json").read_text(encoding="utf-8")) == origin(), "Invalid provenance")
     checks += 1
     entries = sorted(path.parent.name for path in SKILLS.rglob("SKILL.md"))
-    require(entries == sorted(DESCRIPTIONS), f"Unexpected/duplicate skill entrypoints: {entries}")
+    require(entries == sorted([*DESCRIPTIONS, "i-have-adhd"]), f"Unexpected/duplicate skill entrypoints: {entries}")
     checks += 1
     for name in DESCRIPTIONS:
         require((SKILLS / name / "SKILL.md").read_text(encoding="utf-8") == wrapper(name), f"Routing wrapper mismatch: {name}")
@@ -230,7 +235,7 @@ def package(output: Path) -> None:
             archive.write(path, path.relative_to(PLUGIN).as_posix())
     with zipfile.ZipFile(output) as archive:
         require("plugin.json" in archive.namelist(), "Plugin manifest is not at ZIP root")
-        require(sum(name.endswith("/SKILL.md") for name in archive.namelist()) == 3, "Wrong skill count in ZIP")
+        require(sum(name.endswith("/SKILL.md") for name in archive.namelist()) == 4, "Wrong skill count in ZIP")
         require(archive.testzip() is None, "Corrupt ZIP")
     print(f"ZIP: {output.name}; SHA256: {hashlib.sha256(output.read_bytes()).hexdigest()}")
 
@@ -238,7 +243,7 @@ def package(output: Path) -> None:
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     mode = parser.add_mutually_exclusive_group()
-    mode.add_argument("--write", action="store_true", help="Import the pinned snapshot and apply v0.3.1")
+    mode.add_argument("--write", action="store_true", help="Import the pinned snapshot and apply v0.4.0")
     mode.add_argument("--check", action="store_true", help="Validate offline (default)")
     parser.add_argument("--zip", type=Path, help="Build the plugin archive after validation")
     args = parser.parse_args()

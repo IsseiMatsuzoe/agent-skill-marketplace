@@ -1,0 +1,17 @@
+{
+  "repository": "ayghri/i-have-adhd",
+  "commit": "839872f9d1cd634fed642b4589ce7226199cc15f",
+  "license": "MIT",
+  "files": {
+    "skills/i-have-adhd/SKILL.md": "9138ae4af11065b7971eea17edc48a2498c1af35",
+    "skills/i-have-adhd/agents/openai.yaml": "0e8285b9bb854e7ee4c25f4c48f593a87e9eb85d",
+    "LICENSE": "19db5f1b0ca65e277c158bd4c4263139ccfd859c"
+  },
+  "path_mapping": {
+    "skills/i-have-adhd/SKILL.md": "upstream.md",
+    "skills/i-have-adhd/agents/openai.yaml": "agents/openai.yaml",
+    "LICENSE": "LICENSE"
+  },
+  "local_entrypoint": "SKILL.md",
+  "activation": "explicit-only"
+}
