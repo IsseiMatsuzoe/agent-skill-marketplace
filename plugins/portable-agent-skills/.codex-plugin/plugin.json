@@ -1,7 +1,7 @@
 {
   "name": "portable-agent-skills",
-  "version": "0.5.0",
-  "description": "Portable skills for Chat, Work, and Codex: Humanizer, Natural Japanese, yomiyasu, optional i-have-adhd formatting, and explicit Hallmark UI audits.",
+  "version": "0.6.1",
+  "description": "Portable skills for Chat, Work, and Codex: Humanizer, Natural Japanese, yomiyasu, imozuru research, i-have-adhd formatting, and Hallmark UI audits.",
   "author": {
     "name": "Issei Matsuzoe"
   },
@@ -10,7 +10,7 @@
   "interface": {
     "displayName": "Portable Agent Skills",
     "shortDescription": "Portable skills for Chat, Work, and Codex.",
-    "longDescription": "Three writing skills with language- and task-specific selection, optional i-have-adhd formatting, and explicit read-only Hallmark UI audits.",
+    "longDescription": "Writing skills, imozuru research, optional i-have-adhd formatting, and read-only Hallmark UI audits.",
     "developerName": "Issei Matsuzoe",
     "category": "Productivity",
     "capabilities": [

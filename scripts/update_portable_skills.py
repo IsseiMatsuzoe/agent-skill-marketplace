@@ -22,7 +22,7 @@ from update_hallmark import validate as validate_hallmark
 ROOT = Path(__file__).resolve().parents[1]
 PLUGIN = ROOT / "plugins/portable-agent-skills"
 SKILLS = PLUGIN / "skills"
-VERSION = "0.5.0"
+VERSION = "0.6.1"
 UPSTREAM = "nanaism/yomiyasu"
 COMMIT = "8dc47e2594dc63f3dc37cd2c36eaf549e54b4678"
 FILES = {
@@ -179,7 +179,7 @@ def validate() -> None:
     require(json.loads((SKILLS / "yomiyasu/SOURCE.json").read_text(encoding="utf-8")) == origin(), "Invalid provenance")
     checks += 1
     entries = sorted(path.parent.name for path in SKILLS.rglob("SKILL.md"))
-    require(entries == sorted([*DESCRIPTIONS, "i-have-adhd", "hallmark"]), f"Unexpected/duplicate skill entrypoints: {entries}")
+    require(entries == sorted([*DESCRIPTIONS, "i-have-adhd", "hallmark", "imozuru"]), f"Unexpected/duplicate skill entrypoints: {entries}")
     checks += 1
     for name in DESCRIPTIONS:
         require((SKILLS / name / "SKILL.md").read_text(encoding="utf-8") == wrapper(name), f"Routing wrapper mismatch: {name}")
@@ -237,7 +237,7 @@ def package(output: Path) -> None:
             archive.write(path, path.relative_to(PLUGIN).as_posix())
     with zipfile.ZipFile(output) as archive:
         require("plugin.json" in archive.namelist(), "Plugin manifest is not at ZIP root")
-        require(sum(name.endswith("/SKILL.md") for name in archive.namelist()) == 5, "Wrong skill count in ZIP")
+        require(sum(name.endswith("/SKILL.md") for name in archive.namelist()) == 6, "Wrong skill count in ZIP")
         require(archive.testzip() is None, "Corrupt ZIP")
     print(f"ZIP: {output.name}; SHA256: {hashlib.sha256(output.read_bytes()).hexdigest()}")
 
